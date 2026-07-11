@@ -6,10 +6,16 @@
     <title>My Resume</title>
     <link rel="stylesheet" href="stylecv.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </head>
 <body>
+    <button id="download-btn" onclick="downloadResume()" title="Download PDF">
+    <i class="fa-solid fa-download"></i>
+    </button>
 
-    <div class="resume-box">
+    <div class="resume-box" id="resume-box">
         <aside class="left-sidebar">
             <div class="profile-header">
                 <img src="profile-photo.jpeg" alt="Laraib Qadeer" width="260" height="220">
@@ -106,21 +112,36 @@
                 <h2><span class="icon-box"><i class="fa-solid fa-globe"></i></span><span class="title-text">Languages</span></h2>
                 <div class="lang-container">
                     <div class="lang-item">
-                        <div class="circle" style="--percent: 100%; --color: rgb(93, 102, 210);">
+                        <div class="circle">
+                            <svg width="75" height="75">
+                                <circle cx="37.5" cy="37.5" r="34.5" stroke="#334155" stroke-width="6" fill="#1e293b" />
+                                <circle cx="37.5" cy="37.5" r="34.5" stroke="rgb(93, 102, 210)" stroke-width="6" fill="transparent"
+                                        stroke-dasharray="216.77" stroke-dashoffset="0" stroke-linecap="round" transform="rotate(-90 37.5 37.5)" />
+                            </svg>
                             <span>100%</span>
                         </div>
                         <p>Urdu</p>
                     </div>
 
                     <div class="lang-item">
-                        <div class="circle" style="--percent: 90%; --color: rgb(93, 102, 210);">
+                        <div class="circle">
+                            <svg width="75" height="75">
+                                <circle cx="37.5" cy="37.5" r="34.5" stroke="#334155" stroke-width="6" fill="#1e293b" />
+                                <circle cx="37.5" cy="37.5" r="34.5" stroke="rgb(93, 102, 210)" stroke-width="6" fill="transparent"
+                                        stroke-dasharray="216.77" stroke-dashoffset="21.68" stroke-linecap="round" transform="rotate(-90 37.5 37.5)" />
+                            </svg>
                             <span>90%</span>
                         </div>
                         <p>English</p>
                     </div>
 
                     <div class="lang-item">
-                        <div class="circle" style="--percent: 70%; --color: rgb(93, 102, 210);">
+                        <div class="circle">
+                            <svg width="75" height="75">
+                                <circle cx="37.5" cy="37.5" r="34.5" stroke="#334155" stroke-width="6" fill="#1e293b" />
+                                <circle cx="37.5" cy="37.5" r="34.5" stroke="rgb(93, 102, 210)" stroke-width="6" fill="transparent"
+                                        stroke-dasharray="216.77" stroke-dashoffset="65.03" stroke-linecap="round" transform="rotate(-90 37.5 37.5)" />
+                            </svg>
                             <span>70%</span>
                         </div>
                         <p>Punjabi</p>
@@ -201,14 +222,14 @@
                             <p>Java, Data Structures & Algorithms</p>
                         </div>
                     </div>
-                    <div class="project">
-                        <img src="policeapp.jpeg" alt="Online Police Reporting App" width="180" height="120">
-                        <h3>ONLINE POLICE REPORTING APP</h3>
-                        <p>OOP-based system for online report submission and management, with a secure user authentication system.</p>
+                    <a href="../week2-weather-app/WeatherApp.html" target="_blank" class="project project-link" id="weather-app-project" title="Click to open Weather App">
+                        <img src="weatherapp_screenshot.png" alt="Weather App" width="180" height="120">
+                        <h3>LIVE WEATHER APP</h3>
+                        <p>Glassmorphism weather dashboard with real-time forecasts, sunrise/sunset data, 5-day outlook, and dynamic sky backgrounds.</p>
                         <div class="projP">
-                            <p>Java, OOP</p>
+                            <p>HTML, CSS, JavaScript, OpenWeatherMap API</p>
                         </div>
-                    </div>
+                    </a>
                 </div>
             </section>
 
@@ -262,6 +283,37 @@
         </main>
 
     </div>
+    <script>
+    function downloadResume() {
+    const element = document.getElementById('resume-box');
+    const btn = document.getElementById('download-btn');
 
+    btn.style.display = 'none';
+    window.scrollTo(0, 0);
+
+    html2canvas(element, {
+        scale: 2,
+        useCORS: true,
+        scrollX: 0,
+        scrollY: 0,
+        windowWidth: element.scrollWidth,
+        windowHeight: element.scrollHeight
+    }).then(canvas => {
+        const imgData = canvas.toDataURL('image/jpeg', 1.0);
+        const { jsPDF } = window.jspdf;
+
+        const pdf = new jsPDF({
+            orientation: canvas.width > canvas.height ? 'landscape' : 'portrait',
+            unit: 'px',
+            format: [canvas.width, canvas.height]
+        });
+
+        pdf.addImage(imgData, 'JPEG', 0, 0, canvas.width, canvas.height);
+        pdf.save('Laraib_Qadeer_CV.pdf');
+
+        btn.style.display = 'flex';
+    });
+}
+    </script>
 </body>
 </html>
