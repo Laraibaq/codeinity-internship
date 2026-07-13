@@ -100,7 +100,6 @@ copyBtn.addEventListener('click', () => {
     if (!username || username === 'username') return;
 
     navigator.clipboard.writeText(username).then(() => {
-        // Show success state
         copyBtn.classList.add('copied');
         copyIcon.className = 'fa-solid fa-check';
 
@@ -109,7 +108,6 @@ copyBtn.addEventListener('click', () => {
             copyIcon.className = 'fa-regular fa-copy';
         }, 2000);
     }).catch(() => {
-        // Fallback for older browsers
         const temp = document.createElement('input');
         temp.value = username;
         document.body.appendChild(temp);
@@ -135,18 +133,17 @@ async function handleSearch() {
     showSkeleton();
 
     try {
-        // Fetch user profile and repos in parallel
+
         const [profileRes, reposRes] = await Promise.all([
             fetch(`https://api.github.com/users/${username}`),
             fetch(`https://api.github.com/users/${username}/repos?sort=stars&per_page=6`)
         ]);
 
-        // Handle rate limit (403) for profile request
+
         if (profileRes.status === 403) {
             throw new Error('RATE_LIMIT');
         }
 
-        // Handle user not found (404)
         if (profileRes.status === 404) {
             throw new Error(`No GitHub user found with the username "${username}".`);
         }
@@ -158,11 +155,9 @@ async function handleSearch() {
         const profileData = await profileRes.json();
         const reposData = reposRes.ok ? await reposRes.json() : [];
 
-        // Save to recent searches
         saveRecentSearch(username);
         renderRecentSearches();
 
-        // Render everything
         renderProfile(profileData);
         renderTopRepos(reposData);
 
@@ -179,7 +174,7 @@ async function handleSearch() {
     }
 }
 
-// ─── Render Profile ───────────────────────────────────────────
+
 function renderProfile(data) {
     avatar.src = data.avatar_url || '';
     avatar.alt = `${data.login}'s GitHub avatar`;
@@ -192,7 +187,6 @@ function renderProfile(data) {
     profileBio.textContent = data.bio || '';
     profileBio.style.display = data.bio ? 'block' : 'none';
 
-    // Location
     if (data.location) {
         profileLocation.textContent = data.location;
         locationItem.classList.remove('hidden');
@@ -200,7 +194,6 @@ function renderProfile(data) {
         locationItem.classList.add('hidden');
     }
 
-    // Blog
     if (data.blog) {
         const blogUrl = data.blog.startsWith('http') ? data.blog : `https://${data.blog}`;
         profileBlog.textContent = data.blog.replace(/^https?:\/\//, '');
@@ -210,7 +203,6 @@ function renderProfile(data) {
         blogItem.classList.add('hidden');
     }
 
-    // Twitter / X
     if (data.twitter_username) {
         profileTwitter.textContent = `@${data.twitter_username}`;
         twitterItem.classList.remove('hidden');
@@ -218,13 +210,13 @@ function renderProfile(data) {
         twitterItem.classList.add('hidden');
     }
 
-    // Join date
+
     const joinedDate = new Date(data.created_at);
     profileJoined.textContent = `Joined ${joinedDate.toLocaleDateString('en-US', {
         year: 'numeric', month: 'long', day: 'numeric'
     })}`;
 
-    // Animated stats
+
     animateCounter(statRepos, data.public_repos || 0);
     animateCounter(statFollowers, data.followers || 0);
     animateCounter(statFollowing, data.following || 0);
@@ -294,7 +286,7 @@ function renderTopRepos(repos) {
     });
 }
 
-// ─── Recent Searches ──────────────────────────────────────────
+
 function saveRecentSearch(username) {
     let recent = getRecentSearches();
     // Remove if already exists (move to front)

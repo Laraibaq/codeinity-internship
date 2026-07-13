@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JSON Data Explorer — JSONPlaceholder</title>
+    <meta name="description"
+        content="Explore all JSONPlaceholder API resources — Posts, Comments, Albums, Photos, Todos, and Users — rendered as beautiful interactive cards.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="Json.css">
+</head>
+
+<body>
+
+    <header class="app-header">
+        <div class="app-header-inner">
+            <div class="app-logo" onclick="showHome(event)" title="Back to Home">
+                <span class="app-logo-label">JSON<span>Explorer</span></span>
+            </div>
+        </div>
+    </header>
+
+    <section class="hero-view" id="homeView">
+
+        <div class="resource-grid" id="resourceGrid">
+
+            <button class="res-card" id="rc-posts" onclick="openResource('posts')">
+                <div class="rc-top">
+                    <div class="rc-icons">
+                        <span class="rc-icon-chip chip-purple"><i class="fa-solid fa-file-lines"></i></span>
+                        <span class="rc-icon-chip chip-soft"><i class="fa-solid fa-pen-nib"></i></span>
+                    </div>
+                    <span class="rc-heart"><i class="fa-regular fa-heart"></i></span>
+                </div>
+                <h2 class="rc-title">Posts</h2>
+                <p class="rc-desc">Browse all published posts with titles and body content from registered users.</p>
+                <div class="rc-footer">
+                    <span class="rc-count" id="rcc-posts"><i class="fa-solid fa-spinner fa-spin"></i></span>
+                    <span class="rc-arrow"><i class="fa-solid fa-arrow-right"></i></span>
+                </div>
+            </button>
+
+            <button class="res-card" id="rc-comments" onclick="openResource('comments')">
+                <div class="rc-top">
+                    <div class="rc-icons">
+                        <span class="rc-icon-chip chip-cyan"><i class="fa-solid fa-comments"></i></span>
+                        <span class="rc-icon-chip chip-soft"><i class="fa-solid fa-quote-right"></i></span>
+                    </div>
+                    <span class="rc-heart"><i class="fa-regular fa-heart"></i></span>
+                </div>
+                <h2 class="rc-title">Comments</h2>
+                <p class="rc-desc">Read user comments attached to posts, including author emails and message bodies.</p>
+                <div class="rc-footer">
+                    <span class="rc-count" id="rcc-comments"><i class="fa-solid fa-spinner fa-spin"></i></span>
+                    <span class="rc-arrow"><i class="fa-solid fa-arrow-right"></i></span>
+                </div>
+            </button>
+
+            <button class="res-card" id="rc-albums" onclick="openResource('albums')">
+                <div class="rc-top">
+                    <div class="rc-icons">
+                        <span class="rc-icon-chip chip-pink"><i class="fa-solid fa-layer-group"></i></span>
+                        <span class="rc-icon-chip chip-soft"><i class="fa-solid fa-images"></i></span>
+                    </div>
+                    <span class="rc-heart"><i class="fa-regular fa-heart"></i></span>
+                </div>
+                <h2 class="rc-title">Albums</h2>
+                <p class="rc-desc">Explore photo album collections organized by user across all registered accounts.</p>
+                <div class="rc-footer">
+                    <span class="rc-count" id="rcc-albums"><i class="fa-solid fa-spinner fa-spin"></i></span>
+                    <span class="rc-arrow"><i class="fa-solid fa-arrow-right"></i></span>
+                </div>
+            </button>
+
+            <button class="res-card" id="rc-photos" onclick="openResource('photos')">
+                <div class="rc-top">
+                    <div class="rc-icons">
+                        <span class="rc-icon-chip chip-blue"><i class="fa-solid fa-image"></i></span>
+                        <span class="rc-icon-chip chip-soft"><i class="fa-solid fa-camera"></i></span>
+                    </div>
+                    <span class="rc-heart"><i class="fa-regular fa-heart"></i></span>
+                </div>
+                <h2 class="rc-title">Photos</h2>
+                <p class="rc-desc">View thousands of photo thumbnails with titles, organized by album collections.</p>
+                <div class="rc-footer">
+                    <span class="rc-count" id="rcc-photos"><i class="fa-solid fa-spinner fa-spin"></i></span>
+                    <span class="rc-arrow"><i class="fa-solid fa-arrow-right"></i></span>
+                </div>
+            </button>
+
+            <button class="res-card" id="rc-todos" onclick="openResource('todos')">
+                <div class="rc-top">
+                    <div class="rc-icons">
+                        <span class="rc-icon-chip chip-green"><i class="fa-solid fa-list-check"></i></span>
+                        <span class="rc-icon-chip chip-soft"><i class="fa-solid fa-check-double"></i></span>
+                    </div>
+                    <span class="rc-heart"><i class="fa-regular fa-heart"></i></span>
+                </div>
+                <h2 class="rc-title">Todos</h2>
+                <p class="rc-desc">Track todo items with completion status — view what's done and what's still pending.
+                </p>
+                <div class="rc-footer">
+                    <span class="rc-count" id="rcc-todos"><i class="fa-solid fa-spinner fa-spin"></i></span>
+                    <span class="rc-arrow"><i class="fa-solid fa-arrow-right"></i></span>
+                </div>
+            </button>
+
+            <button class="res-card" id="rc-users" onclick="openResource('users')">
+                <div class="rc-top">
+                    <div class="rc-icons">
+                        <span class="rc-icon-chip chip-violet"><i class="fa-solid fa-users"></i></span>
+                        <span class="rc-icon-chip chip-soft"><i class="fa-solid fa-id-card"></i></span>
+                    </div>
+                    <span class="rc-heart"><i class="fa-regular fa-heart"></i></span>
+                </div>
+                <h2 class="rc-title">Users</h2>
+                <p class="rc-desc">View registered user profiles with contact info, addresses and company details.</p>
+                <div class="rc-footer">
+                    <span class="rc-count" id="rcc-users"><i class="fa-solid fa-spinner fa-spin"></i></span>
+                    <span class="rc-arrow"><i class="fa-solid fa-arrow-right"></i></span>
+                </div>
+            </button>
+
+        </div>
+    </section>
+
+    <section class="data-view hidden" id="dataView">
+
+        <div class="data-topbar">
+            <button class="back-btn" onclick="showHome(event)">
+                <i class="fa-solid fa-arrow-left"></i> Back
+            </button>
+            <div class="breadcrumb">
+                <span onclick="showHome(event)" class="bc-home">Home</span>
+                <i class="fa-solid fa-chevron-right bc-sep"></i>
+                <span class="bc-current" id="bcCurrent">Posts</span>
+            </div>
+            <div class="data-controls">
+                <div class="search-box">
+                    <i class="fa-solid fa-magnifying-glass"></i>
+                    <input type="text" id="searchInput" placeholder="Search…" oninput="handleSearch()">
+                </div>
+            </div>
+        </div>
+
+        <div class="data-header" id="dataHeader"></div>
+
+        <div class="cards-area">
+            <div class="cards-grid" id="cardContainer"></div>
+            <div class="empty-state hidden" id="noResults">
+                <i class="fa-solid fa-ghost"></i>
+                <p>No results found</p>
+            </div>
+        </div>
+
+        <div class="pagination" id="pagination"></div>
+
+    </section>
+
+    <script src="Json.js"></script>
+</body>
+
+</html>
