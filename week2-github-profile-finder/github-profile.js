@@ -227,14 +227,12 @@ function renderProfile(data) {
     showCard();
 }
 
-// ─── Render Top Repositories ──────────────────────────────────
 function renderTopRepos(repos) {
     if (!repos || repos.length === 0) {
         reposSection.style.display = 'none';
         return;
     }
 
-    // Filter out forks, sort by stars, take top 3
     const topRepos = repos
         .filter(r => !r.fork)
         .sort((a, b) => b.stargazers_count - a.stargazers_count)
@@ -289,10 +287,10 @@ function renderTopRepos(repos) {
 
 function saveRecentSearch(username) {
     let recent = getRecentSearches();
-    // Remove if already exists (move to front)
+
     recent = recent.filter(u => u.toLowerCase() !== username.toLowerCase());
     recent.unshift(username);
-    // Keep only last MAX_RECENT
+
     recent = recent.slice(0, MAX_RECENT);
     localStorage.setItem(RECENT_KEY, JSON.stringify(recent));
 }
@@ -327,7 +325,6 @@ function renderRecentSearches() {
     recentSearches.classList.add('visible');
 }
 
-// ─── Theme Toggle ─────────────────────────────────────────────
 function applyTheme(theme) {
     document.documentElement.setAttribute('data-theme', theme);
     localStorage.setItem(THEME_KEY, theme);
@@ -341,7 +338,6 @@ function applyTheme(theme) {
     }
 }
 
-// ─── Animated Number Counter ──────────────────────────────────
 function animateCounter(element, target) {
     const duration = 900;
     const startTime = performance.now();
@@ -357,7 +353,6 @@ function animateCounter(element, target) {
     requestAnimationFrame(update);
 }
 
-// ─── UI State Helpers ─────────────────────────────────────────
 function setLoading(isLoading) {
     searchBtn.disabled = isLoading;
     if (isLoading) {
@@ -408,7 +403,6 @@ function shakeSearchBox() {
     searchBox.classList.add('error-shake');
 }
 
-// ─── Utility Helpers ─────────────────────────────────────────
 function escapeHtml(str) {
     if (!str) return '';
     return str
