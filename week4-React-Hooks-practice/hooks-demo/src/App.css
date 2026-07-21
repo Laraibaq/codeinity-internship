@@ -1,0 +1,203 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap');
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #0d0f14;
+  --surface: #161b27;
+  --surface2: #1e2535;
+  --border: #2a3448;
+  --accent: #6366f1;
+  --accent2: #f43f5e;
+  --green: #22c55e;
+  --yellow: #eab308;
+  --text: #e2e8f0;
+  --muted: #64748b;
+  --radius: 16px;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Inter', sans-serif;
+  min-height: 100vh;
+}
+
+.app {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 2rem 1.5rem;
+}
+
+.app-header {
+  text-align: center;
+  padding: 3rem 1rem 2.5rem;
+  margin-bottom: 2rem;
+}
+
+.app-header h1 {
+  font-size: clamp(1.8rem, 4vw, 2.8rem);
+  font-weight: 700;
+  background: linear-gradient(135deg, #a5b4fc, #818cf8, #6366f1);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin-bottom: 0.75rem;
+}
+
+.app-header p {
+  color: var(--muted);
+  font-size: 1.05rem;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 1.5rem;
+}
+
+/* ─── Card ─── */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--accent2), var(--accent));
+  opacity: 0.8;
+}
+
+.card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+  border-color: var(--accent);
+}
+
+.card h2 {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #a5b4fc;
+  font-family: 'JetBrains Mono', monospace;
+  letter-spacing: 0.04em;
+}
+
+.card .label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--accent2);
+  background: rgba(244, 63, 94, 0.1);
+  border: 1px solid rgba(244, 63, 94, 0.25);
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+  line-height: 1.5;
+}
+
+.card .value {
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: var(--text);
+  font-family: 'JetBrains Mono', monospace;
+  text-align: center;
+  padding: 0.5rem;
+}
+
+.card .hint {
+  font-size: 0.78rem;
+  color: var(--yellow);
+  background: rgba(234, 179, 8, 0.08);
+  border-left: 3px solid var(--yellow);
+  border-radius: 4px;
+  padding: 0.5rem 0.75rem;
+  line-height: 1.6;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* ─── Button ─── */
+button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.6rem 1.2rem;
+  background: linear-gradient(135deg, var(--accent), #818cf8);
+  color: #fff;
+  font-family: 'Inter', sans-serif;
+  font-size: 0.875rem;
+  font-weight: 600;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: opacity 0.2s, transform 0.15s;
+  width: fit-content;
+}
+
+button:hover { opacity: 0.88; transform: scale(1.03); }
+button:active { transform: scale(0.97); }
+
+/* ─── User card ─── */
+.user-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.75rem 1rem;
+}
+
+.user-card strong { color: var(--text); font-size: 0.95rem; }
+.user-card span { color: var(--muted); font-size: 0.82rem; }
+
+/* ─── Tooltip demo ─── */
+.tooltip-demo {
+  position: relative;
+  display: inline-block;
+  margin: 0.5rem 0;
+}
+
+.tooltip-target {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.5rem 1rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+  display: inline-block;
+}
+
+.tooltip {
+  position: absolute;
+  background: linear-gradient(135deg, #1e2535, #2a3448);
+  border: 1px solid var(--accent2);
+  border-radius: 8px;
+  padding: 0.4rem 0.7rem;
+  font-size: 0.75rem;
+  color: var(--accent2);
+  white-space: nowrap;
+  pointer-events: none;
+  animation: flicker 2s infinite;
+}
+
+@keyframes flicker {
+  0%   { opacity: 1; transform: translateY(0); }
+  10%  { opacity: 0; transform: translateY(-8px); }
+  20%  { opacity: 1; transform: translateY(4px); }
+  100% { opacity: 1; transform: translateY(4px); }
+}
+
+/* ─── Scrollbar ─── */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
