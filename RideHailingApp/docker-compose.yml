@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgis/postgis:16-3.4
+    container_name: ride-hailing-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ride_hailing
+      POSTGRES_PASSWORD: ride_hailing
+      POSTGRES_DB: ride_hailing
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ride_hailing -d ride_hailing"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres_data:

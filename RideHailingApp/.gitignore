@@ -1,0 +1,43 @@
+# --- Node ---
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pnpm-store/
+package-lock.json.bak
+.npm/
+.yarn/
+*.tgz
+.env
+.env.*
+!.env.example
+coverage/
+
+# --- NestJS ---
+dist/
+build/
+.nest/
+
+# --- Prisma ---
+apps/backend/generated/
+
+# --- Expo / React Native ---
+.expo/
+.expo-shared/
+web-build/
+*.jsbundle
+*.hbc
+android/
+ios/
+*.orig.*
+metro-cache/
+
+# --- Editors / OS ---
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# --- Logs ---
+*.log

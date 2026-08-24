@@ -1,0 +1,172 @@
+// Prisma schema for RideHailingApp backend.
+// Entities and fields follow /docs/Dependencies.docx §5 "Database Schema — MVP1 Entities".
+
+generator client {
+  provider        = "prisma-client"
+  output          = "../generated/prisma"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  extensions = [postgis]
+}
+
+enum VerificationStatus {
+  pending
+  approved
+  rejected
+}
+
+enum VehicleType {
+  car
+  bike
+  rickshaw
+}
+
+enum RideStatus {
+  requested
+  offered
+  accepted
+  ongoing
+  completed
+  cancelled
+}
+
+enum OfferType {
+  accept
+  reject
+  counter
+}
+
+enum OfferStatus {
+  pending
+  accepted
+  rejected
+  expired
+}
+
+enum RatingRole {
+  passenger
+  driver
+}
+
+// Passengers.
+model User {
+  id              String   @id @default(uuid()) @db.Uuid
+  name            String
+  phone           String   @unique
+  email           String?  @unique
+  passwordHash    String
+  profilePhotoUrl String?
+  rating          Float?
+  rideCount       Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  rides Ride[] @relation("PassengerRides")
+
+  @@map("users")
+}
+
+model Driver {
+  id                 String             @id @default(uuid()) @db.Uuid
+  name               String
+  phone              String             @unique
+  email              String?            @unique
+  passwordHash       String
+  licenseNumber      String
+  licenseDocUrl      String
+  cnicNumber         String
+  cnicDocUrl         String
+  verificationStatus VerificationStatus @default(pending)
+  rating             Float?
+  isOnline           Boolean            @default(false)
+  currentLat         Float?
+  currentLng         Float?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  vehicle    Vehicle?
+  rides      Ride[]      @relation("DriverRides")
+  rideOffers RideOffer[]
+
+  @@map("drivers")
+}
+
+model Vehicle {
+  id                 String      @id @default(uuid()) @db.Uuid
+  driverId           String      @unique @db.Uuid
+  type               VehicleType
+  make               String
+  model              String
+  color              String
+  registrationNumber String      @unique
+  registrationDocUrl String
+
+  driver Driver @relation(fields: [driverId], references: [id])
+
+  @@map("vehicles")
+}
+
+model Ride {
+  id                String     @id @default(uuid()) @db.Uuid
+  passengerId       String     @db.Uuid
+  driverId          String?    @db.Uuid
+  pickupLat         Float
+  pickupLng         Float
+  pickupAddress     String
+  dropoffLat        Float
+  dropoffLng        Float
+  dropoffAddress    String
+  distanceKm        Float
+  etaMinutes        Int
+  proposedFare      Decimal    @db.Decimal(10, 2)
+  aiRecommendedFare Decimal    @db.Decimal(10, 2)
+  finalFare         Decimal?   @db.Decimal(10, 2)
+  status            RideStatus @default(requested)
+  requestedAt       DateTime   @default(now())
+  startedAt         DateTime?
+  completedAt       DateTime?
+  cancelledAt       DateTime?
+
+  passenger User        @relation("PassengerRides", fields: [passengerId], references: [id])
+  driver    Driver?     @relation("DriverRides", fields: [driverId], references: [id])
+  offers    RideOffer[]
+  ratings   Rating[]
+
+  @@map("rides")
+}
+
+model RideOffer {
+  id          String      @id @default(uuid()) @db.Uuid
+  rideId      String      @db.Uuid
+  driverId    String      @db.Uuid
+  offerType   OfferType
+  offerAmount Decimal?    @db.Decimal(10, 2)
+  status      OfferStatus @default(pending)
+  createdAt   DateTime    @default(now())
+  expiresAt   DateTime
+
+  ride   Ride   @relation(fields: [rideId], references: [id])
+  driver Driver @relation(fields: [driverId], references: [id])
+
+  @@map("ride_offers")
+}
+
+model Rating {
+  id         String     @id @default(uuid()) @db.Uuid
+  rideId     String     @db.Uuid
+  // fromUserId/toUserId intentionally have no FK relation: fromRole determines
+  // whether the actor is a User or a Driver, so the id can't target a single table.
+  fromUserId String     @db.Uuid
+  toUserId   String     @db.Uuid
+  fromRole   RatingRole
+  score      Int
+  comment    String?
+  createdAt  DateTime   @default(now())
+
+  ride Ride @relation(fields: [rideId], references: [id])
+
+  @@map("ratings")
+}
