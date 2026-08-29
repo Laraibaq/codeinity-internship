@@ -1,10 +1,20 @@
-import { Pressable, Text, View } from "react-native";
+import { Pressable, ScrollView, Text, View } from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import { useRouter } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { themeColors } from "@/constants/theme-colors";
 
+// Fixed: the back arrow had no onPress at all (Root Cause A of this batch) -- wired to
+// `router.back()`, returning to welcome.tsx.
+//
+// Fixed (Root Cause B of this batch): the middle content (the offer-card graphic + "Fair Fares"
+// card) wasn't in a ScrollView, so on shorter devices it could exceed the space between the
+// absolutely-positioned header and footer with no way to reach the cut-off content -- and
+// attempting to scroll it was instead triggering the OS's edge-swipe-back gesture, landing back on
+// welcome.tsx instead of scrolling.
+//
 // Rule 3 substitutions used on this screen:
 // - Google "Material Symbols Outlined" ligature icons substituted with @expo/vector-icons'
 //   MaterialIcons (name case converted underscore -> hyphen), as on every screen in this batch.
@@ -32,25 +42,38 @@ import { themeColors } from "@/constants/theme-colors";
 
 export default function DriverOnboardingNegotiationScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
   return (
     <View className="relative flex-1 overflow-hidden bg-background">
-      <View className="absolute left-0 right-0 top-0 z-50 h-16 w-full flex-row items-center justify-between bg-surface px-container-margin">
-        <Pressable className="items-center justify-center rounded-full p-2 active:scale-95">
-          <MaterialIcons name="arrow-back" size={16} color={themeColors.primary} />
-        </Pressable>
-        <Text className="flex-1 text-center font-headline-lg-mobile text-headline-lg-mobile font-bold text-primary">
-          Driver Registration
-        </Text>
-        <Pressable
-          onPress={() => router.push("/(driver-auth)/register")}
-          className="items-center justify-center rounded-full p-2 active:scale-95"
-        >
-          <Text className="font-label-sm text-label-sm text-primary">Skip</Text>
-        </Pressable>
+      <View
+        style={{ paddingTop: insets.top }}
+        className="absolute left-0 right-0 top-0 z-50 w-full bg-surface"
+      >
+        <View className="h-16 w-full flex-row items-center justify-between px-container-margin">
+          <Pressable
+            onPress={() => router.back()}
+            className="items-center justify-center rounded-full p-2 active:scale-95"
+          >
+            <MaterialIcons name="arrow-back" size={16} color={themeColors.primary} />
+          </Pressable>
+          <Text className="flex-1 text-center font-headline-lg-mobile text-headline-lg-mobile font-bold text-primary">
+            Driver Registration
+          </Text>
+          <Pressable
+            onPress={() => router.push("/(driver-auth)/register")}
+            className="items-center justify-center rounded-full p-2 active:scale-95"
+          >
+            <Text className="font-label-sm text-label-sm text-primary">Skip</Text>
+          </Pressable>
+        </View>
       </View>
 
-      <View className="mx-auto w-full max-w-md flex-1 items-center justify-center px-container-margin pb-32 pt-16">
+      <ScrollView
+        className="mx-auto w-full max-w-md flex-1"
+        contentContainerClassName="flex-grow items-center justify-center px-container-margin pb-32"
+        contentContainerStyle={{ paddingTop: 64 + insets.top }}
+      >
         <View className="relative mb-stack-lg aspect-square w-full items-center justify-center">
           <View className="absolute inset-0 scale-110 rounded-full bg-surface-container-low opacity-30" />
           <View className="absolute inset-4 rounded-full bg-primary-container opacity-10" />
@@ -117,7 +140,7 @@ export default function DriverOnboardingNegotiationScreen() {
             </Text>
           </View>
         </View>
-      </View>
+      </ScrollView>
 
       <View className="absolute bottom-0 left-0 right-0 z-50 w-full items-center gap-stack-sm border-t border-surface-container-high bg-surface px-container-margin py-stack-md pb-8">
         <View className="mb-2 flex-row gap-2">

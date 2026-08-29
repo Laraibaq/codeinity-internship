@@ -1,11 +1,18 @@
-import { Pressable, Text, View } from "react-native";
+import { Pressable, ScrollView, Text, View } from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { BlurView } from "expo-blur";
 import { useRouter } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { themeColors } from "@/constants/theme-colors";
 
+// Fixed (Root Cause B of this batch): the bottom content section (headline/paragraph/button) was a
+// fixed-height (`flex-shrink-0`) View, not scrollable -- since the panel above it enforces a
+// `min-h-[50%]` floor it can't shrink past, a short device could force this section to overflow the
+// screen's `overflow-hidden` container with no way to reach the cut-off content. Wrapped in a
+// ScrollView so it's reachable either way.
+//
 // Rule 3 substitutions used on this screen (in addition to the icon-ligature -> MaterialIcons
 // substitution used throughout this batch, see onboarding-negotiation.tsx for that note):
 // - Every icon here uses Google's default "outlined" (FILL 0) Material Symbols style, except the
@@ -35,18 +42,24 @@ import { themeColors } from "@/constants/theme-colors";
 
 export default function DriverOnboardingEarningsScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
   return (
     <View className="h-full flex-1 items-center justify-center bg-surface">
       <View className="relative h-full w-full max-w-md flex-1 overflow-hidden bg-surface">
         {/* Skip header — same absolute-pinned pattern as onboarding-negotiation */}
-        <View className="absolute left-0 right-0 top-0 z-50 h-16 w-full flex-row items-center justify-end bg-surface px-container-margin">
-          <Pressable
-            onPress={() => router.push("/(driver-auth)/register")}
-            className="items-center justify-center rounded-full p-2 active:scale-95"
-          >
-            <Text className="font-label-sm text-label-sm text-primary">Skip</Text>
-          </Pressable>
+        <View
+          style={{ paddingTop: insets.top }}
+          className="absolute left-0 right-0 top-0 z-50 w-full bg-surface"
+        >
+          <View className="h-16 w-full flex-row items-center justify-end px-container-margin">
+            <Pressable
+              onPress={() => router.push("/(driver-auth)/register")}
+              className="items-center justify-center rounded-full p-2 active:scale-95"
+            >
+              <Text className="font-label-sm text-label-sm text-primary">Skip</Text>
+            </Pressable>
+          </View>
         </View>
 
         <View className="relative min-h-[50%] w-full flex-1 items-center justify-center overflow-hidden bg-surface-container-low p-container-margin">
@@ -114,7 +127,10 @@ export default function DriverOnboardingEarningsScreen() {
           </View>
         </View>
 
-        <View className="relative z-20 -mt-6 flex-shrink-0 gap-6 rounded-t-[2rem] bg-surface px-container-margin pb-8 pt-10">
+        <ScrollView
+          className="relative z-20 -mt-6 flex-shrink-0 rounded-t-[2rem] bg-surface"
+          contentContainerClassName="flex-grow gap-6 px-container-margin pb-8 pt-10"
+        >
           <View className="mb-2 flex-row items-center justify-center gap-2">
             <View className="h-2 w-2 rounded-full bg-outline-variant" />
             <View className="h-2 w-8 rounded-full bg-primary" />
@@ -146,7 +162,7 @@ export default function DriverOnboardingEarningsScreen() {
               <MaterialIcons name="arrow-forward" size={20} color={themeColors.onPrimary} />
             </Pressable>
           </View>
-        </View>
+        </ScrollView>
       </View>
     </View>
   );

@@ -1,10 +1,16 @@
-import { Image, Pressable, Text, View } from "react-native";
+import { Image, Pressable, ScrollView, Text, View } from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 
 import { themeColors } from "@/constants/theme-colors";
 
+// Fixed (Root Cause B of this batch): the bottom sheet (headline/subtitle/2 buttons) was a plain
+// fixed View, not scrollable -- the hero image above it is a fixed 486px, so on a short device the
+// remaining space could be too little for this content, with no way to reach anything cut off.
+// Wrapped in a ScrollView (with its content still bottom-anchored via `justify-end` on the content
+// container, matching the original bottom-sheet look when everything already fits).
+//
 // Rule 3 substitutions used on this screen:
 // - Google "Material Symbols Outlined" ligature icons (<span class="material-symbols-outlined">)
 //   have no NativeWind/RN equivalent (it's a web icon-font ligature technique), substituted with
@@ -73,7 +79,10 @@ export default function DriverWelcomeScreen() {
           />
         </View>
 
-        <View className="-mt-[40px] flex-1 justify-end rounded-t-[32px] bg-background px-container-margin pb-[40px] pt-[24px]">
+        <ScrollView
+          className="-mt-[40px] flex-1 rounded-t-[32px] bg-background"
+          contentContainerClassName="flex-grow justify-end px-container-margin pb-[40px] pt-[24px]"
+        >
           <View className="mx-auto mb-stack-md h-1 w-10 rounded-full bg-outline-variant opacity-50" />
 
           <View className="mb-stack-lg flex flex-col gap-stack-sm">
@@ -115,7 +124,7 @@ export default function DriverWelcomeScreen() {
               </Text>
             </Pressable>
           </View>
-        </View>
+        </ScrollView>
       </View>
     </View>
   );
