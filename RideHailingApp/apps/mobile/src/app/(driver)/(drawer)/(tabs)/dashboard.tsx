@@ -128,14 +128,32 @@ const SAMPLE_REQUESTS: Omit<RideRequest, "id">[] = [
 // ScrollView -- matching the row style the now-deleted nearby-requests.tsx screen used (full-width
 // card, spacious padding, timeline against the left border) -- so the list scrolls instead of
 // wrapping once more requests arrive than fit on screen.
+//
+// Fixed: Reject used to push to reject-reason.tsx and wait for that screen to report back (via a
+// `rejectedRequestId` param) before removing the card. Per explicit instruction, Reject now removes
+// the card immediately with no reason-selection step -- reject-reason.tsx is unreferenced anywhere
+// in the codebase as of this change (confirmed via a full `src` grep) and was left in place rather
+// than deleted, per that same instruction.
+//
+// Auto-expiry: each request now starts a 15-second `setTimeout` when it's added (`startRequestTimer`
+// below), removing itself the same way a manual Reject does if the driver hasn't acted by then.
+// Accept/Counter/Reject all clear that card's timer first (`clearRequestTimer`) so a request the
+// driver has already acted on can't also silently vanish out from under them a few seconds later.
+// Timers are tracked in a plain `Map` ref (not state -- they're not rendered, so they don't need to
+// trigger a re-render) and are deliberately not surfaced as any kind of visible countdown, per
+// explicit instruction. All outstanding timers are cleared on unmount to avoid a `setRequests` call
+// on an unmounted screen.
+const REQUEST_EXPIRY_MS = 15000;
+
 export default function DriverDashboardScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const params = useLocalSearchParams<{ status?: string; rejectedRequestId?: string }>();
+  const params = useLocalSearchParams<{ status?: string }>();
   const [status, setStatus] = useState<DriverStatus>("offline");
   const [onlineView, setOnlineView] = useState<OnlineView>("searching");
   const [requests, setRequests] = useState<RideRequest[]>([]);
   const nextSampleIndex = useRef(0);
+  const requestTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
 
   // Fixed: the online<->offline swap (and the nested searching<->no-requests swap below) used to
   // be an instant hard content-swap with zero feedback. Both now cross-fade via
@@ -150,26 +168,49 @@ export default function DriverDashboardScreen() {
     }
   }, [params.status]);
 
-  // reject-reason.tsx reports back which card to remove via this param (same param-as-signal
-  // mechanism as `status` above), since it's a separate pushed screen with no other way to reach
-  // back into this screen's `requests` state once the driver submits a rejection reason.
   useEffect(() => {
-    if (params.rejectedRequestId) {
-      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-      setRequests((current) => current.filter((request) => request.id !== params.rejectedRequestId));
+    const timers = requestTimers.current;
+    return () => {
+      timers.forEach((timer) => clearTimeout(timer));
+      timers.clear();
+    };
+  }, []);
+
+  const clearRequestTimer = (id: string) => {
+    const timer = requestTimers.current.get(id);
+    if (timer) {
+      clearTimeout(timer);
+      requestTimers.current.delete(id);
     }
-  }, [params.rejectedRequestId]);
+  };
+
+  const removeRequest = (id: string) => {
+    clearRequestTimer(id);
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setRequests((current) => current.filter((request) => request.id !== id));
+  };
+
+  const startRequestTimer = (id: string) => {
+    requestTimers.current.set(
+      id,
+      setTimeout(() => removeRequest(id), REQUEST_EXPIRY_MS),
+    );
+  };
 
   const handleSimulateRequest = () => {
     const sample = SAMPLE_REQUESTS[nextSampleIndex.current % SAMPLE_REQUESTS.length];
     nextSampleIndex.current += 1;
+    const id = `req-${Date.now()}-${nextSampleIndex.current}`;
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setOnlineView("searching");
-    setRequests((current) => [...current, { ...sample, id: `req-${Date.now()}-${current.length}` }]);
+    setRequests((current) => [...current, { ...sample, id }]);
+    startRequestTimer(id);
   };
 
   const handleSimulateNoRequests = () => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    requestTimers.current.forEach((timer) => clearTimeout(timer));
+    requestTimers.current.clear();
     setRequests([]);
     setOnlineView("no-requests");
   };
@@ -209,14 +250,15 @@ export default function DriverDashboardScreen() {
                 <RideRequestCard
                   key={request.id}
                   request={request}
-                  onAccept={() => router.push("/(driver)/navigate-to-pickup")}
-                  onCounter={() => router.push("/(driver)/counter-offer")}
-                  onReject={() =>
-                    router.push({
-                      pathname: "/(driver)/reject-reason",
-                      params: { requestId: request.id },
-                    })
-                  }
+                  onAccept={() => {
+                    clearRequestTimer(request.id);
+                    router.push("/(driver)/navigate-to-pickup");
+                  }}
+                  onCounter={() => {
+                    clearRequestTimer(request.id);
+                    router.push("/(driver)/counter-offer");
+                  }}
+                  onReject={() => removeRequest(request.id)}
                 />
               ))}
             </ScrollView>
