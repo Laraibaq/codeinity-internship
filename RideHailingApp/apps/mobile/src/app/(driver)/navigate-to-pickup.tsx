@@ -179,9 +179,15 @@ export default function NavigateToPickupScreen() {
   return (
     <View className="h-screen w-screen flex-1 bg-surface">
       <View className="absolute inset-0 z-0 overflow-hidden bg-surface-container-low">
+        {/* Fixed: this URI used to point at a screenshot of an entirely different mockup card
+            ("Navigate To Pickup" / "742 Evergreen Terrace, Springfield" / "Begin Route" baked
+            into the image pixels as its own UI, not a map) -- rendered as this screen's "map"
+            background, it looked like two overlapping screens even though only one was actually
+            mounted. Swapped for the same plain map screenshot dashboard.tsx already uses as its
+            offline-state background, which is a real map with no UI baked in. */}
         <Image
           source={{
-            uri: "https://lh3.googleusercontent.com/aida-public/AB6AXuDaF5Vw6-0J3pkCMtIMeMNEh1CIz-rpi78pRN_V8_3mA9u8hJTwOyCOZPRn6QRKRoNEcTC6Z_BCNaMA-6WLDUC72gNOwuQak0tL2toSqZ2o4pP9DsYAGvcIHw_wFyUmNxB4q52xJQ2Ug85axd50Pa0BcIrVo66SAt1YTPTt4wMezKpTwzk1tc372E2D933dfxt5o4cgPUn4msn-VbwWh1UC7DwtOqOKm9_HrxolBhAt_M3zIX6vd6ih",
+            uri: "https://lh3.googleusercontent.com/aida-public/AB6AXuCFyWmsppKp780nLLlL3AsgX2qtpTgOD1yJv761joNOqSnPBw6HRlT_ndHUdE8JrGlEI95RpLtYmz53Cko5COeKB4qYguYETwq9Uhp06DrwBph4bikKNamU4tNrTbQV-6ofR_9rWI1NlAuR3OqjDx2CI32zLY6Sy37zgynZFC2CIxoep3KV3UlVxZzAFVQVvVVdp9RwEwt4nd0qiZLmNTURNAakTjOxsTtSqaMH3MwArnGgEp8xqWJQ",
           }}
           resizeMode="cover"
           className="h-full w-full opacity-60"
