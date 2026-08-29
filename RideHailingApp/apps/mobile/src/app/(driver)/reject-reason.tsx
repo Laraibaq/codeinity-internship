@@ -35,11 +35,16 @@ const REASONS = [
 // `useState<string | null>` driving `disabled` directly. This is real, simple UI state (a selection
 // gate), not the kind of backend logic rule 5 excludes.
 //
-// "Submit Feedback" uses `router.dismissTo` back to (driver)/(tabs)/dashboard, carrying the
-// `requestId` forward as a `rejectedRequestId` param -- dashboard.tsx watches that param (same
-// param-as-signal mechanism it already uses for `status`) and removes the matching card from its
-// request list once this screen reports back. Back arrow is a plain `router.back()`: returns to the
-// dashboard without rejecting anything.
+// "Submit Feedback" uses `router.dismissTo` back to (driver)/(drawer)/(tabs)/dashboard (dashboard.tsx
+// moved under the new drawer-nav group), carrying the `requestId` forward as a `rejectedRequestId`
+// param -- dashboard.tsx watches that param (same param-as-signal mechanism it already uses for
+// `status`) and removes the matching card from its request list once this screen reports back. Back
+// arrow is a plain `router.back()`: returns to the dashboard without rejecting anything.
+//
+// As of the latest request-card batch, dashboard.tsx's own Reject button no longer navigates here at
+// all -- it removes the card immediately, no reason-selection step. This screen is currently
+// unreferenced (kept in place per explicit instruction rather than deleted, since nothing else in
+// the codebase points to it either).
 export default function RejectReasonScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -108,7 +113,7 @@ export default function RejectReasonScreen() {
             disabled={!selected}
             onPress={() =>
               router.dismissTo({
-                pathname: "/(driver)/(tabs)/dashboard",
+                pathname: "/(driver)/(drawer)/(tabs)/dashboard",
                 params: requestId ? { rejectedRequestId: requestId } : {},
               })
             }
