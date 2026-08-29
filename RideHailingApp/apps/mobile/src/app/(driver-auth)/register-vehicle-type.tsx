@@ -105,17 +105,21 @@ export default function DriverRegisterVehicleTypeScreen() {
           {vehicleTypeOptions.map((option) => {
             const selected = vehicleType === option.value;
             return (
+              // Fixed: className used to interpolate a three-way disabled/selected conditional into
+              // a template literal -- the same NativeWind runtime anti-pattern root-caused on
+              // login.tsx's phone/email toggle. className is now static (bg-surface-container-lowest
+              // was already common to all three branches); the border-color and opacity differences
+              // move to a plain `style` prop instead.
               <Pressable
                 key={option.value}
                 disabled={option.disabled}
                 onPress={() => setVehicleType(option.value)}
-                className={`w-full rounded-xl border p-4 shadow-sm ${
-                  option.disabled
-                    ? "border-outline-variant bg-surface-container-lowest opacity-50"
-                    : selected
-                      ? "border-primary bg-surface-container-lowest"
-                      : "border-outline-variant bg-surface-container-lowest"
-                }`}
+                className="w-full rounded-xl border bg-surface-container-lowest p-4 shadow-sm"
+                style={{
+                  borderColor:
+                    !option.disabled && selected ? themeColors.primary : themeColors.outlineVariant,
+                  opacity: option.disabled ? 0.5 : 1,
+                }}
               >
                 <View className="flex-row items-center justify-between">
                   <View>

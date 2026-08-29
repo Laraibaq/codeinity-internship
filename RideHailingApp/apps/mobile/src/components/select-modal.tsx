@@ -9,6 +9,13 @@ import { themeColors } from "@/constants/theme-colors";
 // rows, matching the project's established Modal styling (reset-password.tsx's centered card over a
 // bg-black/50 backdrop). The backdrop itself is a Pressable that closes on tap; the card is also a
 // Pressable with a no-op onPress so taps inside it don't fall through to the backdrop's onPress.
+//
+// Fixed: each option row's className used to interpolate `selected ? "bg-primary-container" : ""`
+// into a template literal -- the same NativeWind runtime anti-pattern root-caused on login.tsx's
+// phone/email toggle (a conditionally-shaped className triggers a lazy component "upgrade" +
+// remount that crashes native navigation). This is a shared component reused across several
+// registration screens, so the bug was multiplied across every screen that renders this list.
+// className is now static; the selected-dependent background moves to a plain `style` prop instead.
 
 export function SelectModal({
   visible,
@@ -61,9 +68,8 @@ export function SelectModal({
                     onSelect(option);
                     onClose();
                   }}
-                  className={`flex-row items-center justify-between px-gutter py-3 ${
-                    selected ? "bg-primary-container" : ""
-                  }`}
+                  className="flex-row items-center justify-between px-gutter py-3"
+                  style={selected ? { backgroundColor: themeColors.primaryContainer } : undefined}
                 >
                   <Text
                     className="font-body-md text-body-md"

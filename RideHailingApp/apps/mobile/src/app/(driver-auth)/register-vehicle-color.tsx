@@ -172,12 +172,17 @@ export default function DriverRegisterVehicleColorScreen() {
                   onPress={() => setSelectedKey(option.key)}
                   className="w-1/4 items-center gap-2"
                 >
+                  {/* Fixed: className used to interpolate `selected ? "scale-110" : ""` into a
+                      template literal -- the same NativeWind runtime anti-pattern root-caused on
+                      login.tsx's phone/email toggle. className is now static; the selected-dependent
+                      scale transform is folded into the existing `style` prop instead. */}
                   <View
-                    className={`h-12 w-12 rounded-full shadow-sm ${selected ? "scale-110" : ""}`}
+                    className="h-12 w-12 rounded-full shadow-sm"
                     style={{
                       backgroundColor: option.hex,
                       borderWidth: selected ? 3 : 1,
                       borderColor: selected ? themeColors.primary : `${themeColors.outlineVariant}33`,
+                      transform: selected ? [{ scale: 1.1 }] : undefined,
                     }}
                   />
                 </Pressable>
@@ -265,13 +270,14 @@ export default function DriverRegisterVehicleColorScreen() {
                     className="w-1/4 items-center gap-2"
                   >
                     <View
-                      className={`h-12 w-12 rounded-full shadow-sm ${selected ? "scale-110" : ""}`}
+                      className="h-12 w-12 rounded-full shadow-sm"
                       style={{
                         backgroundColor: option.hex,
                         borderWidth: selected ? 3 : 1,
                         borderColor: selected
                           ? themeColors.primary
                           : `${themeColors.outlineVariant}33`,
+                        transform: selected ? [{ scale: 1.1 }] : undefined,
                       }}
                     />
                   </Pressable>

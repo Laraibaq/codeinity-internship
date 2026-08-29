@@ -175,15 +175,21 @@ export default function DriverVerifyPhoneScreen() {
           <Text className="font-label-sm text-label-sm text-on-surface-variant">
             Didn&apos;t receive the code?
           </Text>
+          {/* Fixed: className used to interpolate the countdown state into a template literal --
+              the same NativeWind runtime anti-pattern root-caused on login.tsx's phone/email
+              toggle. className is now static; the color/underline difference moves to a plain
+              `style` prop instead. */}
           <Pressable
             disabled={timeLeft > 0}
             onPress={() => setTimeLeft(30)}
             className="ml-1"
           >
             <Text
-              className={`font-label-sm text-label-sm font-bold ${
-                timeLeft > 0 ? "text-outline-variant" : "text-primary underline"
-              }`}
+              className="font-label-sm text-label-sm font-bold"
+              style={{
+                color: timeLeft > 0 ? themeColors.outlineVariant : themeColors.primary,
+                textDecorationLine: timeLeft > 0 ? "none" : "underline",
+              }}
             >
               {timeLeft > 0 ? `Resend in 00:${seconds}` : "Resend Code"}
             </Text>

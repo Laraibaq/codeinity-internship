@@ -81,6 +81,21 @@ const rides = [
   },
 ];
 
+// Fixed: this tab toggle's active-segment className, and the dimmed-ride-row opacity below, used to
+// be interpolated into template literals -- the same NativeWind runtime anti-pattern root-caused on
+// login.tsx's phone/email toggle (which was itself modeled on this exact tab-pill pattern, per this
+// file's own header comment -- ironic that the original wasn't fixed alongside the copy). Every
+// className below is now static; each state-dependent difference moves to a plain `style` prop
+// instead, same fix as @/components/login-method-toggle.tsx's activeSegmentStyle.
+const activeHistoryTabStyle = {
+  backgroundColor: themeColors.surface,
+  shadowColor: "#000000",
+  shadowOffset: { width: 0, height: 1 },
+  shadowOpacity: 0.05,
+  shadowRadius: 2,
+  elevation: 1,
+};
+
 export default function DriverHistoryScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -116,28 +131,30 @@ export default function DriverHistoryScreen() {
           <View className="mb-stack-md flex-row rounded-lg bg-surface-container-high p-1">
             <Pressable
               onPress={() => setTab("completed")}
-              className={`flex-1 items-center rounded-md px-4 py-2 ${
-                tab === "completed" ? "bg-surface shadow-sm" : ""
-              }`}
+              className="flex-1 items-center rounded-md px-4 py-2"
+              style={tab === "completed" ? activeHistoryTabStyle : undefined}
             >
               <Text
-                className={`font-label-sm text-label-sm ${
-                  tab === "completed" ? "font-bold text-on-surface" : "text-secondary"
-                }`}
+                className="font-label-sm text-label-sm"
+                style={{
+                  color: tab === "completed" ? themeColors.onSurface : themeColors.secondary,
+                  fontWeight: tab === "completed" ? "700" : undefined,
+                }}
               >
                 Completed
               </Text>
             </Pressable>
             <Pressable
               onPress={() => setTab("cancelled")}
-              className={`flex-1 items-center rounded-md px-4 py-2 ${
-                tab === "cancelled" ? "bg-surface shadow-sm" : ""
-              }`}
+              className="flex-1 items-center rounded-md px-4 py-2"
+              style={tab === "cancelled" ? activeHistoryTabStyle : undefined}
             >
               <Text
-                className={`font-label-sm text-label-sm ${
-                  tab === "cancelled" ? "font-bold text-on-surface" : "text-secondary"
-                }`}
+                className="font-label-sm text-label-sm"
+                style={{
+                  color: tab === "cancelled" ? themeColors.onSurface : themeColors.secondary,
+                  fontWeight: tab === "cancelled" ? "700" : undefined,
+                }}
               >
                 Cancelled
               </Text>
@@ -180,9 +197,8 @@ export default function DriverHistoryScreen() {
                     },
                   })
                 }
-                className={`flex-row items-center justify-between rounded-xl border border-outline-variant bg-surface p-4 shadow-sm ${
-                  ride.dimmed ? "opacity-70" : ""
-                }`}
+                className="flex-row items-center justify-between rounded-xl border border-outline-variant bg-surface p-4 shadow-sm"
+                style={ride.dimmed ? { opacity: 0.7 } : undefined}
               >
                 <View className="flex-1 flex-row items-start gap-4">
                   <View className="h-10 w-10 items-center justify-center rounded-full bg-surface-container-low">

@@ -138,21 +138,29 @@ export default function DriverRegisterIdentityDocumentScreen() {
           {idOptions.map((option) => {
             const selected = idType === option.value;
             return (
+              // Fixed: every conditionally-toggled className below (row border/background, icon
+              // circle background, checkmark circle border/background) used to be interpolated into
+              // template literals -- the same NativeWind runtime anti-pattern root-caused on
+              // login.tsx's phone/email toggle. Every className below is now static; each
+              // state-dependent color moves to a plain `style` prop instead.
               <Pressable
                 key={option.value}
                 onPress={() => setIdType(option.value)}
-                className={`flex-row items-center gap-gutter rounded-xl border p-gutter ${
-                  selected
-                    ? "border-primary bg-surface-container-low"
-                    : "border-outline-variant bg-surface-container-lowest"
-                }`}
+                className="flex-row items-center gap-gutter rounded-xl border p-gutter"
+                style={{
+                  borderColor: selected ? themeColors.primary : themeColors.outlineVariant,
+                  backgroundColor: selected
+                    ? themeColors.surfaceContainerLow
+                    : themeColors.surfaceContainerLowest,
+                }}
               >
                 <View
-                  className={`h-12 w-12 items-center justify-center rounded-full ${
-                    selected
-                      ? "bg-primary-container"
-                      : "bg-secondary-container"
-                  }`}
+                  className="h-12 w-12 items-center justify-center rounded-full"
+                  style={{
+                    backgroundColor: selected
+                      ? themeColors.primaryContainer
+                      : themeColors.secondaryContainer,
+                  }}
                 >
                   <MaterialIcons
                     name={option.icon}
@@ -169,9 +177,11 @@ export default function DriverRegisterIdentityDocumentScreen() {
                   </Text>
                 </View>
                 <View
-                  className={`h-6 w-6 items-center justify-center rounded-full border-2 ${
-                    selected ? "border-primary bg-primary" : "border-outline-variant"
-                  }`}
+                  className="h-6 w-6 items-center justify-center rounded-full border-2"
+                  style={{
+                    borderColor: selected ? themeColors.primary : themeColors.outlineVariant,
+                    backgroundColor: selected ? themeColors.primary : "transparent",
+                  }}
                 >
                   {selected ? (
                     <MaterialIcons name="check" size={16} color="#ffffff" />
