@@ -41,13 +41,14 @@ import { useOpenDrawer } from "@/hooks/use-open-drawer";
 //   is step 7 of onboarding and pushes on to register-vehicle-model.tsx next.
 // - Documents -> verification-status.tsx (push, default "review" state), per explicit confirmation.
 // - Ratings & Reviews -> ratings-reviews.tsx (push); new screen, mock data (no backend yet).
-// - Earnings Settings -> Earnings tab (push). Real payout-method configuration is explicitly
-//   deferred to MVP3 per this project's cash-only policy (see src/utils/currency.ts header
-//   comment), so this redirects to Earnings instead of doing nothing.
-// - Header gear icon -> opens the sidebar (Drawer, see (drawer)/_layout.tsx), which is where
-//   Settings now lives as a menu item alongside History/Ratings & Reviews/Notifications/Help
-//   Center. Previously pushed straight to settings.tsx directly; now that a real drawer exists,
-//   funneling every secondary destination through one menu is the more standard driver-app pattern.
+// - "Earnings Settings" row removed entirely, per explicit request: it only ever redirected to the
+//   Earnings tab (real payout-method configuration is deferred to MVP3 per this project's
+//   cash-only policy -- see src/utils/currency.ts), and Earnings is already one tap away as its own
+//   bottom tab, so the row was a redundant second entry point to the same screen.
+// - Header menu icon -> opens the sidebar (Drawer, see (drawer)/_layout.tsx), which is where
+//   Settings now lives as a menu item alongside History/Ratings & Reviews/Help Center. Previously
+//   pushed straight to settings.tsx directly; now that a real drawer exists, funneling every
+//   secondary destination through one menu is the more standard driver-app pattern.
 // - Header notifications bell -> notifications.tsx (push, now a sidebar screen); kept as a direct
 //   shortcut rather than folded into the drawer too, since notifications are checked far more often
 //   than any other sidebar item and deserve their own one-tap icon.
@@ -62,19 +63,19 @@ export default function DriverAccountScreen() {
       <View style={{ paddingTop: insets.top }} className="w-full bg-surface shadow-sm">
         <View className="w-full flex-row items-center justify-between px-container-margin py-base">
           <Pressable
-            onPress={() => router.push("/(driver)/(drawer)/notifications")}
+            onPress={openDrawer}
             className="items-center justify-center rounded-full p-2 active:scale-95"
           >
-            <MaterialIcons name="notifications" size={24} color={themeColors.primary} />
+            <MaterialIcons name="menu" size={24} color={themeColors.primary} />
           </Pressable>
           <Text className="font-headline-lg-mobile text-headline-lg-mobile font-bold text-primary">
             Driver Portal
           </Text>
           <Pressable
-            onPress={openDrawer}
+            onPress={() => router.push("/(driver)/(drawer)/notifications")}
             className="items-center justify-center rounded-full p-2 active:scale-95"
           >
-            <MaterialIcons name="menu" size={24} color={themeColors.primary} />
+            <MaterialIcons name="notifications" size={24} color={themeColors.primary} />
           </Pressable>
         </View>
       </View>
@@ -209,28 +210,6 @@ export default function DriverAccountScreen() {
             <MaterialIcons name="chevron-right" size={24} color={themeColors.outline} />
           </Pressable>
 
-          {/* Payout-method configuration itself is explicitly deferred to MVP3 per the cash-only
-              policy (see src/utils/currency.ts header comment) -- this redirects to the Earnings
-              tab instead of doing nothing, until that real settings screen exists. */}
-          <Pressable
-            onPress={() => router.push("/(driver)/(drawer)/(tabs)/earnings")}
-            className="w-full flex-row items-center justify-between rounded-xl border border-surface-container-highest bg-surface-container-lowest p-4 shadow-sm active:scale-[0.98]"
-          >
-            <View className="flex-row items-center gap-4">
-              <View className="h-12 w-12 items-center justify-center rounded-full bg-surface-container">
-                <MaterialIcons name="payments" size={24} color={themeColors.primary} />
-              </View>
-              <View>
-                <Text className="font-body-md text-body-md font-semibold text-on-surface">
-                  Earnings Settings
-                </Text>
-                <Text className="font-label-sm text-label-sm font-normal text-on-surface-variant">
-                  Payout methods &amp; statements
-                </Text>
-              </View>
-            </View>
-            <MaterialIcons name="chevron-right" size={24} color={themeColors.outline} />
-          </Pressable>
         </View>
       </ScrollView>
     </View>

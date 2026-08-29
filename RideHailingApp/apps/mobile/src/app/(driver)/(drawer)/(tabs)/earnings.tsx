@@ -112,19 +112,19 @@ export default function DriverEarningsScreen() {
       <View style={{ paddingTop: insets.top }} className="z-40 w-full bg-surface shadow-sm">
         <View className="w-full flex-row items-center justify-between px-container-margin py-base">
           <Pressable
-            onPress={() => router.push("/(driver)/(drawer)/notifications")}
+            onPress={openDrawer}
             className="items-center justify-center rounded-full p-2 active:scale-95"
           >
-            <MaterialIcons name="notifications" size={24} color={themeColors.primary} />
+            <MaterialIcons name="menu" size={24} color={themeColors.primary} />
           </Pressable>
           <Text className="font-headline-lg-mobile text-headline-lg-mobile font-bold text-primary">
             Driver Portal
           </Text>
           <Pressable
-            onPress={openDrawer}
+            onPress={() => router.push("/(driver)/(drawer)/notifications")}
             className="items-center justify-center rounded-full p-2 active:scale-95"
           >
-            <MaterialIcons name="menu" size={24} color={themeColors.primary} />
+            <MaterialIcons name="notifications" size={24} color={themeColors.primary} />
           </Pressable>
         </View>
       </View>
@@ -197,8 +197,13 @@ export default function DriverEarningsScreen() {
             <Text className="font-headline-lg-mobile text-headline-lg-mobile text-on-surface">
               {PERIOD_OPTIONS.find((o) => o.key === period)?.label} Overview
             </Text>
-            {/* TODO: no destination specified for "View Details". */}
-            <Pressable className="flex-row items-center gap-1">
+            {/* "View Details" -> History (drawer): that screen already lists the ride-by-ride
+                breakdown behind these totals -- a separate ledger screen here would just
+                duplicate it. */}
+            <Pressable
+              onPress={() => router.push("/(driver)/(drawer)/history")}
+              className="flex-row items-center gap-1"
+            >
               <Text className="font-label-sm text-label-sm text-primary">View Details</Text>
               <MaterialIcons name="arrow-forward" size={14} color={themeColors.primary} />
             </Pressable>

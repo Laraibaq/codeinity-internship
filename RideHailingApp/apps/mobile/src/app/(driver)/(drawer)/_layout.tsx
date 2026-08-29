@@ -8,12 +8,17 @@ import { themeColors } from "@/constants/theme-colors";
 
 // Sidebar for the driver app. Everything that isn't one of the 3 primary bottom tabs (Dashboard,
 // Earnings, Account -- see (tabs)/_layout.tsx) lives here as a real menu item instead of being
-// buried behind a chain of pushes: History, Ratings & Reviews, Notifications, Help Center,
-// Settings. Documents (verification-status.tsx) and the profile sub-editors
-// (edit-personal-info.tsx, vehicle-profile.tsx) stay reached via Account, same as before -- they're
-// profile actions, not global nav destinations, and verification-status.tsx is also used as a
-// linear step right after registration, so it stays outside this group rather than becoming a
-// drawer-only screen.
+// buried behind a chain of pushes: History, Ratings & Reviews, Help Center, Settings. Documents
+// (verification-status.tsx) and the profile sub-editors (edit-personal-info.tsx,
+// vehicle-profile.tsx) stay reached via Account, same as before -- they're profile actions, not
+// global nav destinations, and verification-status.tsx is also used as a linear step right after
+// registration, so it stays outside this group rather than becoming a drawer-only screen.
+//
+// Notifications is NOT listed in the menu below, per explicit request -- it already has its own
+// direct header bell icon on every tab/drawer screen, so listing it here too was a duplicate entry
+// point for the same destination. `notifications.tsx` stays registered as a `Drawer.Screen` (just
+// below) so it's still reachable and keeps its slide-in transition; only the visible menu row is
+// removed.
 //
 // Every screen inside this group opens the drawer via `navigation.dispatch(DrawerActions.
 // openDrawer())` from its own header icon. That action isn't handled by the Tabs navigator the 3
@@ -21,13 +26,12 @@ import { themeColors } from "@/constants/theme-colors";
 // need to manually reach through `getParent()` from the nested tab screens.
 
 const MENU_ITEMS: {
-  route: "history" | "ratings-reviews" | "notifications" | "help-center" | "settings";
+  route: "history" | "ratings-reviews" | "help-center" | "settings";
   label: string;
   icon: keyof typeof MaterialIcons.glyphMap;
 }[] = [
   { route: "history", label: "Ride History", icon: "history" },
   { route: "ratings-reviews", label: "Ratings & Reviews", icon: "reviews" },
-  { route: "notifications", label: "Notifications", icon: "notifications" },
   { route: "help-center", label: "Help Center", icon: "help-center" },
   { route: "settings", label: "Settings", icon: "settings" },
 ];
