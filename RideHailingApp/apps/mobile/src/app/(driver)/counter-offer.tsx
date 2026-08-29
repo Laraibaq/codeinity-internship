@@ -2,7 +2,6 @@ import { useState } from "react";
 import { ActivityIndicator, LayoutAnimation, Pressable, Text, View } from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { themeColors } from "@/constants/theme-colors";
 import { formatCurrency } from "@/utils/currency";
@@ -10,9 +9,16 @@ import { formatCurrency } from "@/utils/currency";
 const STEP = 0.5;
 
 // Source: "Counter Offer" (form state) + "Counter Offer Sent" (awaiting-response state). Presented
-// as a modal (see (driver)/_layout.tsx), shared by both ride-request-notification.tsx and
-// ride-request-detail.tsx's "Counter" buttons -- neither caller needs to know which one opened it,
-// since dismissing (`router.back()`) always returns to whichever screen pushed it.
+// as a transparentModal (see (driver)/_layout.tsx), opened from dashboard.tsx's inline request
+// cards' "Counter" button -- the caller doesn't need to know anything about this screen, since
+// dismissing (`router.back()`) always returns to whichever screen pushed it.
+//
+// Fixed: this screen used to render as a full pushed-style screen with its own header bar (back
+// arrow + "Counter Offer" title) above the bottom-sheet card, on an opaque background. Per explicit
+// instruction it's now a pure popup: no header at all, just the bottom-sheet card itself, with the
+// caller screen showing through dimmed (via the scrim below) in the space above it -- same visual
+// result `select-modal.tsx`'s backdrop achieves, just via a route-level transparentModal instead of
+// an in-screen <Modal>, since this needs its own route for router.push/back navigation.
 //
 // Rule 3 substitutions used on this screen:
 // - Icon-ligature -> MaterialIcons substitution as on every screen in this project; every icon
@@ -23,11 +29,6 @@ const STEP = 0.5;
 //   resting frame -- the ring is drawn as a plain circle rather than a spinner mid-spin.
 // - `hover:*` / `group-hover:*` / `transition-*` / `duration-*` dropped throughout, including the
 //   form button's hover sheen sweep -- no hover state on touch devices.
-//
-// Header fixed, not kept literal (per explicit correction -- same copy-paste-artifact pattern
-// already fixed on forgot-password.tsx/verify-phone.tsx): the form source's header reads "Driver
-// Registration", the same mismatch already fixed on dashboard.tsx's offline state. Replaced with
-// "Counter Offer" (both sources' own <title> tags agree on this), shown in both phases below.
 //
 // Fare stepper: local `useState<number>` (rule 5's "approved presentation state"), starting at 16.00
 // and moving in $0.50 increments, matching the source's vanilla-JS behavior exactly. Every dollar
@@ -47,18 +48,8 @@ const STEP = 0.5;
 // see handleSendCounterOffer's TODO for the real API call this delay stands in for -- and the
 // transition itself cross-fades via `LayoutAnimation.easeInEaseOut` instead of popping instantly.
 //
-// Fixed: both phases used to show a background map image behind the sheet (grayscale/dimmed in the
-// form phase, blurred via `expo-blur`'s <BlurView> plus a tint overlay in the sent phase) that had
-// no relevance to a counter-offer screen -- no map/location context makes sense here. Removed
-// entirely per explicit instruction, consistent with the same simplification applied to
-// dashboard.tsx's online/searching state. Each phase's own wrapping View already carries a flat
-// design-token background (`bg-surface-container-low` in the form phase, the screen root's
-// `bg-background` in the sent phase), so no replacement layer was needed once the image (and, in the
-// sent phase, the now-pointless blur/tint layers that existed only to sit on top of that image) came
-// out.
 export default function CounterOfferScreen() {
   const router = useRouter();
-  const insets = useSafeAreaInsets();
   const [fare, setFare] = useState(16);
   const [phase, setPhase] = useState<"form" | "sent">("form");
   const [isSending, setIsSending] = useState(false);
@@ -76,27 +67,11 @@ export default function CounterOfferScreen() {
   };
 
   return (
-    <View className="h-full flex-1 items-center bg-background">
-      <View style={{ paddingTop: insets.top }} className="mx-auto w-full max-w-md bg-surface shadow-sm">
-        <View className="h-16 w-full flex-row items-center justify-between px-container-margin py-base">
-        <Pressable
-          onPress={() => router.back()}
-          className="items-center justify-center rounded-full p-2 active:scale-95"
-        >
-          <MaterialIcons name="arrow-back" size={24} color={themeColors.primary} />
-        </Pressable>
-        {/* Fixed: see header note above. */}
-        <Text className="font-headline-lg-mobile text-headline-lg-mobile font-bold text-primary">
-          Counter Offer
-        </Text>
-        <View className="w-10" />
-        </View>
-      </View>
+    <View className="h-full flex-1 items-center">
+      <View className="absolute inset-0 bg-black/40" pointerEvents="none" />
 
       {phase === "form" ? (
         <View className="relative mx-auto w-full max-w-md flex-1 justify-end pb-8">
-          <View className="absolute inset-0 overflow-hidden rounded-t-3xl bg-surface-container-low" />
-
           <View className="relative z-10 flex-col rounded-t-3xl border-t border-outline-variant bg-surface px-container-margin pb-stack-md pt-4 shadow-lg">
             <View className="mx-auto mb-stack-md h-1 w-10 rounded-full bg-outline-variant" />
 

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { themeColors } from "@/constants/theme-colors";
@@ -14,10 +14,10 @@ const REASONS = [
   { value: "other", label: "Other reason" },
 ] as const;
 
-// Source: "Reject Trip" (Part 7), inserted into the existing decline flow. Both
-// ride-request-detail.tsx's "Decline" and ride-request-notification.tsx's "Reject" now push here
-// instead of calling `router.back()` directly. The source's own h1 reads "Reject Trip" -- kept as
-// this screen's on-screen title even though the route is named reject-reason.tsx.
+// Source: "Reject Trip" (Part 7), inserted into the existing decline flow. dashboard.tsx's inline
+// request cards' "Reject" button pushes here (passing that card's `requestId` as a route param)
+// instead of removing the card immediately. The source's own h1 reads "Reject Trip" -- kept as this
+// screen's on-screen title even though the route is named reject-reason.tsx.
 //
 // Rule 3 substitutions used on this screen:
 // - Icon-ligature -> MaterialIcons substitution as on every screen in this project; every icon
@@ -35,15 +35,15 @@ const REASONS = [
 // `useState<string | null>` driving `disabled` directly. This is real, simple UI state (a selection
 // gate), not the kind of backend logic rule 5 excludes.
 //
-// "Submit Feedback" uses `router.dismissTo` back to (driver)/(tabs)/dashboard, same reasoning as
-// ride-completed.tsx's existing usage: this screen can be reached after either ride-request-detail
-// (itself reached via a `replace`d notification) or directly from the notification modal, so the
-// stack above dashboard.tsx can be 1-2 screens deep depending on the path -- `dismissTo` clears
-// whichever it is in one call, the same way it already does for the accept-side flow. Back arrow is
-// a plain `router.back()`: returns to whichever screen pushed this one, without rejecting anything.
+// "Submit Feedback" uses `router.dismissTo` back to (driver)/(tabs)/dashboard, carrying the
+// `requestId` forward as a `rejectedRequestId` param -- dashboard.tsx watches that param (same
+// param-as-signal mechanism it already uses for `status`) and removes the matching card from its
+// request list once this screen reports back. Back arrow is a plain `router.back()`: returns to the
+// dashboard without rejecting anything.
 export default function RejectReasonScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { requestId } = useLocalSearchParams<{ requestId?: string }>();
   const [selected, setSelected] = useState<string | null>(null);
 
   return (
@@ -107,7 +107,10 @@ export default function RejectReasonScreen() {
           <Pressable
             disabled={!selected}
             onPress={() =>
-              router.dismissTo({ pathname: "/(driver)/(tabs)/dashboard", params: { status: "online" } })
+              router.dismissTo({
+                pathname: "/(driver)/(tabs)/dashboard",
+                params: requestId ? { rejectedRequestId: requestId } : {},
+              })
             }
             className="h-14 w-full items-center justify-center rounded-xl bg-primary shadow-sm active:scale-[0.98]"
             style={selected ? undefined : { opacity: 0.5 }}

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Image, LayoutAnimation, Pressable, Text, View } from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -7,9 +7,50 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { themeColors } from "@/constants/theme-colors";
 import { formatCurrency } from "@/utils/currency";
+import { RideRequestCard, type RideRequest } from "@/components/ride-request-card";
 
 type DriverStatus = "online" | "offline";
 type OnlineView = "searching" | "no-requests";
+
+// Mock pool for the "DEV: Simulate Request" button below -- cycled through so multiple simultaneous
+// requests (the whole point of Part 1's inline-card row) look distinct from each other rather than
+// all being the same passenger repeated. Same fictitious ride data ("Sarah J.", Pier 39 dropoff)
+// already used elsewhere in this flow (was ride-request-notification.tsx's), plus two more variants.
+const SAMPLE_REQUESTS: Omit<RideRequest, "id">[] = [
+  {
+    name: "Sarah J.",
+    rating: 4.9,
+    offer: 15,
+    pickupLabel: "1450 Market Street",
+    pickupMeta: "2 min (0.8 mi)",
+    dropoffLabel: "Pier 39, Fisherman's Wharf",
+    dropoffMeta: "12 min (3.2 mi)",
+    totalMinutes: 14,
+    ratePerMin: 1.07,
+  },
+  {
+    name: "Marcus T.",
+    rating: 4.7,
+    offer: 22,
+    pickupLabel: "Union Square",
+    pickupMeta: "4 min (1.5 mi)",
+    dropoffLabel: "SFO Terminal 2",
+    dropoffMeta: "22 min (14.1 mi)",
+    totalMinutes: 26,
+    ratePerMin: 0.85,
+  },
+  {
+    name: "Priya K.",
+    rating: 5.0,
+    offer: 11,
+    pickupLabel: "Golden Gate Park",
+    pickupMeta: "3 min (1.1 mi)",
+    dropoffLabel: "Painted Ladies",
+    dropoffMeta: "9 min (2.4 mi)",
+    totalMinutes: 12,
+    ratePerMin: 0.92,
+  },
+];
 
 // This screen merges two separate source mockups ("Driver Home - Online" and "Driver Home -
 // Offline") into one stateful screen, per this batch's Part 1 instructions. `status` drives which
@@ -64,25 +105,31 @@ type OnlineView = "searching" | "no-requests";
 // buttons below only exist because this app has no real-time transport wired up yet. Per
 // Dependencies.docx §6, incoming ride requests should arrive over a Socket.IO `ride:new-request`
 // event; once that listener (and whatever decides there's nothing nearby) exists, it should drive
-// `onlineView` itself, and both buttons should be deleted entirely.
+// `requests`/`onlineView` itself, and both buttons should be deleted entirely.
 //
-// `onlineView` ('searching' | 'no-requests'), nested inside the "online" branch: the source for
-// "No Ride Requests" is its own full mockup with its own header (menu/"Online"/account_circle) and
-// its own copy of the map + heatmap layer, rather than an overlay meant to sit inside the existing
-// "searching" chrome. Reproducing that whole second header+map treatment literally would mean the
-// header/ONLINE-pill/nearby-requests-badge popping in and out every time this nested state toggles,
-// which is worse than the fidelity loss: unlike the top-level online/offline split (two screens a
-// driver deliberately navigates between via a real action), these are two moments within one
-// continuous online session, so they share one persistent shell (map, driver marker, ONLINE pill +
-// Go Offline, nearby-requests badge) the same way every (tabs) screen shares one Tabs-provided
-// bottom bar instead of each reproducing its own. Only the overlay content -- the searching card
-// vs. the empty-state card -- is what actually swaps.
+// `onlineView` ('searching' | 'no-requests'), nested inside the "online" branch: this only controls
+// which overlay shows when `requests` is empty. "Simulate Request" appends a mock request to
+// `requests` (and flips `onlineView` back to "searching" in case it was on "no-requests") instead of
+// opening the old ride-request-notification.tsx popup, since Part 1 retired that screen in favor of
+// inline cards. "Simulate No Requests" now clears `requests` and flips `onlineView` to "no-requests",
+// preserving that richer empty state (heatmap zones, "Navigate to hotspot") as still reachable rather
+// than deleting it outright.
+//
+// Fixed (Part 1): incoming requests used to open ride-request-notification.tsx as a
+// transparentModal, with a further push to ride-request-detail.tsx on tapping the card. Both screens
+// have been deleted entirely -- their content (passenger, rating, offer, pickup/dropoff, Accept/
+// Counter/Reject) now renders as `RideRequestCard`s directly on this screen, in a wrapping row
+// directly below the ONLINE/Go Offline bar. Tapping a card does nothing, per explicit instruction;
+// only its three buttons act. Multiple requests can be visible at once (the row wraps), which is the
+// reason `requests` is an array instead of the old single-request-at-a-time modal.
 export default function DriverDashboardScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const params = useLocalSearchParams<{ status?: string }>();
+  const params = useLocalSearchParams<{ status?: string; rejectedRequestId?: string }>();
   const [status, setStatus] = useState<DriverStatus>("offline");
   const [onlineView, setOnlineView] = useState<OnlineView>("searching");
+  const [requests, setRequests] = useState<RideRequest[]>([]);
+  const nextSampleIndex = useRef(0);
 
   // Fixed: the online<->offline swap (and the nested searching<->no-requests swap below) used to
   // be an instant hard content-swap with zero feedback. Both now cross-fade via
@@ -97,30 +144,35 @@ export default function DriverDashboardScreen() {
     }
   }, [params.status]);
 
+  // reject-reason.tsx reports back which card to remove via this param (same param-as-signal
+  // mechanism as `status` above), since it's a separate pushed screen with no other way to reach
+  // back into this screen's `requests` state once the driver submits a rejection reason.
+  useEffect(() => {
+    if (params.rejectedRequestId) {
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+      setRequests((current) => current.filter((request) => request.id !== params.rejectedRequestId));
+    }
+  }, [params.rejectedRequestId]);
+
+  const handleSimulateRequest = () => {
+    const sample = SAMPLE_REQUESTS[nextSampleIndex.current % SAMPLE_REQUESTS.length];
+    nextSampleIndex.current += 1;
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setOnlineView("searching");
+    setRequests((current) => [...current, { ...sample, id: `req-${Date.now()}-${current.length}` }]);
+  };
+
+  const handleSimulateNoRequests = () => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setRequests([]);
+    setOnlineView("no-requests");
+  };
+
   if (status === "online") {
     return (
       <View className="flex-1 bg-surface">
-        <View className="relative flex-1 overflow-hidden bg-surface-container-low">
-          {/* Fixed: this used to be a static street-map <Image> filling the whole screen. Removed
-              entirely per explicit instruction, replaced with nothing but this View's own flat
-              `bg-surface-container-low` fill (already a design token, so no extra layer is needed).
-              The driver-marker dot and (in the "no-requests" branch below) the decorative heatmap
-              blobs were originally map-relative annotations; their own removal wasn't asked for, so
-              they're left in place -- they now read as plain floating decoration on a flat
-              background rather than map pins, which may not be the intended look. Flagging in case
-              those should come out too. */}
-          <View className="absolute left-1/2 top-1/2 h-12 w-12 -translate-x-1/2 -translate-y-1/2 items-center justify-center">
-            <View className="h-6 w-6 items-center justify-center rounded-full border-2 border-white bg-primary shadow-lg">
-              <MaterialIcons name="directions-car" size={14} color="#ffffff" />
-            </View>
-          </View>
-
-          {/* Fixed (global safe-area audit): was pinned at a fixed `top-container-margin` (20px),
-              which sat under the status bar/notch on real devices -- offset by `insets.top` too. */}
-          <View
-            style={{ top: 20 + insets.top }}
-            className="absolute left-container-margin right-container-margin z-40"
-          >
+        <View className="flex-1 bg-surface-container-low">
+          <View style={{ paddingTop: 20 + insets.top }} className="px-container-margin">
             <View className="flex-row items-center justify-between rounded-full border border-outline-variant/20 bg-surface p-2 shadow-lg">
               <View className="flex-row items-center gap-3 px-4">
                 <View className="h-3 w-3 rounded-full bg-green-500" />
@@ -141,105 +193,50 @@ export default function DriverDashboardScreen() {
             </View>
           </View>
 
-          {/* New addition, not from either source (explicitly authorized, unlike this project's
-              usual "flag, don't add" default): nothing links to nearby-requests.tsx otherwise, so
-              a small floating badge button was added here, below the ONLINE pill bar so it doesn't
-              collide with it, matching this project's existing FAB style (e.g.
-              navigate-to-pickup.tsx's right-side buttons). The "3" badge is a static placeholder
-              matching nearby-requests.tsx's initial mock list length -- no shared state exists to
-              keep it live in sync with that screen's own local list. */}
-          <View style={{ top: 96 + insets.top }} className="absolute right-container-margin z-40">
+          <View className="mt-3 flex-row justify-end px-container-margin">
             <Pressable
               onPress={() => router.push("/(driver)/nearby-requests")}
-              className="h-12 w-12 items-center justify-center rounded-full bg-surface shadow-lg active:scale-95"
+              className="flex-row items-center gap-2 rounded-full border border-outline-variant/20 bg-surface px-4 py-2 shadow-lg active:scale-95"
             >
-              <MaterialIcons name="list-alt" size={22} color={themeColors.primary} />
+              <MaterialIcons name="near-me" size={16} color={themeColors.primary} />
+              <Text className="font-label-sm text-label-sm text-on-surface">Nearby</Text>
             </Pressable>
-            <View className="absolute -right-1 -top-1 h-5 w-5 items-center justify-center rounded-full bg-error">
-              <Text className="font-label-sm text-[10px] text-on-error">3</Text>
-            </View>
           </View>
 
-          {onlineView === "searching" ? (
-            <>
-              {/* Fixed: this card used to sit near the bottom (`absolute bottom-24`). Recentered
-                  vertically per explicit instruction, "same centering approach as
-                  forgot-password.tsx's content." That file's own header comment says its
-                  flexGrow/justifyContent:'center' centering was deliberately REMOVED in an earlier,
-                  separate pass (reverted back to natural top-of-screen flow at explicit request) --
-                  so there's no longer a live example of that pattern to copy verbatim from that
-                  file. Flagging this discrepancy rather than silently guessing. What's implemented
-                  here is the same underlying idea (flex-centering within the available space) applied
-                  directly: this card isn't inside a ScrollView at all (it's an absolutely-positioned
-                  overlay, not scrollable document content), so instead of a ScrollView's
-                  contentContainerStyle flexGrow+justifyContent:'center', an
-                  `absolute inset-0 justify-center items-center` wrapper achieves the equivalent
-                  centering-within-the-full-available-space for this non-scrolling case. */}
-              <View
-                className="absolute inset-0 z-30 items-center justify-center px-container-margin"
-                pointerEvents="none"
-              >
-                <View className="w-full max-w-sm items-center gap-2 rounded-2xl border border-outline-variant/30 bg-surface/90 px-6 py-4 shadow-lg">
-                  <MaterialIcons name="my-location" size={28} color={themeColors.primary} />
-                  <Text className="text-center font-body-md text-body-md text-on-surface">
-                    Searching for requests...
-                  </Text>
-                  <Text className="text-center font-label-sm text-label-sm text-on-surface-variant opacity-70">
-                    High demand in your area
-                  </Text>
-                </View>
+          {requests.length > 0 ? (
+            <View className="mt-3 flex-1 px-container-margin">
+              <View className="flex-row flex-wrap gap-2">
+                {requests.map((request) => (
+                  <RideRequestCard
+                    key={request.id}
+                    request={request}
+                    onAccept={() => router.push("/(driver)/navigate-to-pickup")}
+                    onCounter={() => router.push("/(driver)/counter-offer")}
+                    onReject={() =>
+                      router.push({
+                        pathname: "/(driver)/reject-reason",
+                        params: { requestId: request.id },
+                      })
+                    }
+                  />
+                ))}
               </View>
-
-              {/* Dev-only: stand-in for a live `ride:new-request` push (Dependencies.docx §6).
-                  Delete this button once that Socket.IO listener is wired up to open the modal
-                  itself. */}
-              <View className="absolute bottom-6 left-0 right-0 z-30 flex-row justify-center gap-2 px-container-margin">
-                <Pressable
-                  onPress={() => router.push("/(driver)/ride-request-notification")}
-                  className="flex-row items-center gap-2 rounded-full border-2 border-dashed border-amber-500 bg-amber-100 px-4 py-2 active:scale-95"
-                >
-                  <MaterialIcons name="bug-report" size={16} color="#92400e" />
-                  <Text className="font-label-sm text-label-sm text-amber-900">
-                    DEV: Simulate Request
-                  </Text>
-                </Pressable>
-                {/* Dev-only: stand-in for whatever backend logic eventually decides there's
-                    nothing nearby. Delete once that exists. */}
-                <Pressable
-                  onPress={() => {
-                    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-                    setOnlineView("no-requests");
-                  }}
-                  className="flex-row items-center gap-2 rounded-full border-2 border-dashed border-amber-500 bg-amber-100 px-4 py-2 active:scale-95"
-                >
-                  <MaterialIcons name="bug-report" size={16} color="#92400e" />
-                  <Text className="font-label-sm text-label-sm text-amber-900">
-                    DEV: Simulate No Requests
-                  </Text>
-                </Pressable>
+            </View>
+          ) : onlineView === "searching" ? (
+            <View className="flex-1 items-center justify-center px-container-margin">
+              <View className="w-full max-w-sm items-center gap-2 rounded-2xl border border-outline-variant/30 bg-surface/90 px-6 py-4 shadow-lg">
+                <MaterialIcons name="my-location" size={28} color={themeColors.primary} />
+                <Text className="text-center font-body-md text-body-md text-on-surface">
+                  Searching for requests...
+                </Text>
+                <Text className="text-center font-label-sm text-label-sm text-on-surface-variant opacity-70">
+                  High demand in your area
+                </Text>
               </View>
-            </>
+            </View>
           ) : (
-            <View className="absolute inset-0 z-30" pointerEvents="box-none">
-              {/* Heatmap blobs: decorative only (rule 5, UI shell only) -- "highlighted zones" is a
-                  future AI/hotspot feature per Features_and_MVP.docx §4, not real data. The
-                  source's `filter: blur(40px)` + `mix-blend-mode: multiply` have no RN equivalent;
-                  substituted with plain low-opacity color circles, no blend mode. */}
-              <View
-                className="absolute left-1/4 top-1/4 h-64 w-64 rounded-full bg-error-container opacity-30"
-                pointerEvents="none"
-              />
-              <View
-                className="absolute bottom-1/3 right-1/4 h-96 w-96 rounded-full bg-primary-fixed-dim opacity-30"
-                pointerEvents="none"
-              />
-              <View
-                className="absolute left-2/3 top-1/2 h-48 w-48 rounded-full bg-secondary-container opacity-30"
-                pointerEvents="none"
-              />
-
-              <View style={{ marginTop: 96 + insets.top }} className="items-center px-container-margin">
-                <View className="w-full max-w-md items-center rounded-xl border border-outline-variant bg-surface p-6 shadow-lg">
+            <View className="flex-1 items-center justify-center px-container-margin">
+              <View className="w-full max-w-md items-center rounded-xl border border-outline-variant bg-surface p-6 shadow-lg">
                   <View className="mb-stack-sm h-16 w-16 items-center justify-center rounded-full bg-surface-container-low">
                     <MaterialIcons name="search-off" size={36} color={themeColors.primary} />
                   </View>
@@ -252,8 +249,6 @@ export default function DriverDashboardScreen() {
                   </Text>
 
                   <View className="w-full gap-stack-sm">
-                    {/* TODO: hotspot/heatmap logic is a future AI feature (Features_and_MVP.docx
-                        §4) -- not built yet. */}
                     <Pressable className="w-full flex-row items-center justify-center gap-2 rounded-lg bg-primary py-4 shadow-sm active:scale-95">
                       <MaterialIcons name="navigation" size={18} color={themeColors.onPrimary} />
                       <Text className="font-label-sm text-label-sm text-on-primary">
@@ -281,10 +276,31 @@ export default function DriverDashboardScreen() {
                       1h 14m
                     </Text>
                   </View>
-                </View>
               </View>
             </View>
           )}
+
+          <View
+            style={{ paddingBottom: 16 + insets.bottom }}
+            className="gap-2 px-container-margin pt-2"
+          >
+            <Pressable
+              onPress={handleSimulateRequest}
+              className="w-full items-center justify-center rounded-lg bg-primary py-3 shadow-sm active:scale-95"
+            >
+              <Text className="font-label-sm text-label-sm text-on-primary">
+                DEV: Simulate Request
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={handleSimulateNoRequests}
+              className="w-full items-center justify-center rounded-lg border border-outline-variant bg-surface py-3 active:scale-95"
+            >
+              <Text className="font-label-sm text-label-sm text-on-surface">
+                DEV: Simulate No Requests
+              </Text>
+            </Pressable>
+          </View>
         </View>
       </View>
     );
