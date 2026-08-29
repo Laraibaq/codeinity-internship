@@ -1,8 +1,7 @@
 import { useState } from "react";
-import { ActivityIndicator, Image, LayoutAnimation, Pressable, Text, View } from "react-native";
+import { ActivityIndicator, LayoutAnimation, Pressable, Text, View } from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { BlurView } from "expo-blur";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { themeColors } from "@/constants/theme-colors";
@@ -19,11 +18,6 @@ const STEP = 0.5;
 // - Icon-ligature -> MaterialIcons substitution as on every screen in this project; every icon
 //   ("arrow_back", "remove", "add", "insights", "hourglass_top") verified against the installed
 //   glyph map.
-// - The form state's ambient background map image (`opacity-20 filter grayscale`) is decorative
-//   only -- kept as a plain dimmed <Image>, no blur needed since that source doesn't blur it.
-// - The sent state's map overlay uses `mix-blend-luminosity`, which has no RN equivalent; dropped,
-//   same policy as other unsupported CSS blend modes in this project. Its `backdrop-blur-[2px]`
-//   scrim uses `expo-blur`'s <BlurView>, same substitution used elsewhere in this project.
 // - `animate-spin` (the hourglass's spinning ring) and `pulse-ring` (the ring behind it) have no
 //   equivalent without animation code beyond a mechanical conversion; both render in their static
 //   resting frame -- the ring is drawn as a plain circle rather than a spinner mid-spin.
@@ -52,6 +46,16 @@ const STEP = 0.5;
 // shows a brief loading state (disabled button, spinner + "Sending...") before transitioning --
 // see handleSendCounterOffer's TODO for the real API call this delay stands in for -- and the
 // transition itself cross-fades via `LayoutAnimation.easeInEaseOut` instead of popping instantly.
+//
+// Fixed: both phases used to show a background map image behind the sheet (grayscale/dimmed in the
+// form phase, blurred via `expo-blur`'s <BlurView> plus a tint overlay in the sent phase) that had
+// no relevance to a counter-offer screen -- no map/location context makes sense here. Removed
+// entirely per explicit instruction, consistent with the same simplification applied to
+// dashboard.tsx's online/searching state. Each phase's own wrapping View already carries a flat
+// design-token background (`bg-surface-container-low` in the form phase, the screen root's
+// `bg-background` in the sent phase), so no replacement layer was needed once the image (and, in the
+// sent phase, the now-pointless blur/tint layers that existed only to sit on top of that image) came
+// out.
 export default function CounterOfferScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -91,15 +95,7 @@ export default function CounterOfferScreen() {
 
       {phase === "form" ? (
         <View className="relative mx-auto w-full max-w-md flex-1 justify-end pb-8">
-          <View className="absolute inset-0 overflow-hidden rounded-t-3xl bg-surface-container-low">
-            <Image
-              source={{
-                uri: "https://lh3.googleusercontent.com/aida-public/AB6AXuBvrsRt7U6LuxbngJrcnVUcWzK0uk99sUhETCkcYByeQXvR1Nb-BG25qhmBLxIsyDqfwMYmSLmwYa1GQ0TflxpbMponFinDVlNUMMS7twBcrtU2xIJ_2EPjVWLS3ohRIl2dg3-KNif-C17GWkLZ0I14abM8HMwuHzXRWkU0TXQYQIC3geSS9WkJnp42vcf0ua4bi7vvELaX5D_h8nuNML4PJl-H4stShxiCXetrDSC6WIzgu7IZo6aY",
-              }}
-              resizeMode="cover"
-              className="h-full w-full opacity-20"
-            />
-          </View>
+          <View className="absolute inset-0 overflow-hidden rounded-t-3xl bg-surface-container-low" />
 
           <View className="relative z-10 flex-col rounded-t-3xl border-t border-outline-variant bg-surface px-container-margin pb-stack-md pt-4 shadow-lg">
             <View className="mx-auto mb-stack-md h-1 w-10 rounded-full bg-outline-variant" />
@@ -168,22 +164,6 @@ export default function CounterOfferScreen() {
         </View>
       ) : (
         <View className="relative mx-auto w-full max-w-md flex-1 items-center justify-end px-container-margin pb-8">
-          <View className="absolute inset-0 overflow-hidden">
-            <Image
-              source={{
-                uri: "https://lh3.googleusercontent.com/aida-public/AB6AXuC4TcX7gR7AlhrjMAspNuJKCB19zNiHEIfNSX2PHb_xVU9wC3vee2kF4swbwuco8bNeDdyUAF55D4x0Q-N1XhsfJreA4l9vJTzHvJcajb5SklcEasEYBdK7GtTvYxcZoTEgR_0k4DABcjDkJviHzDfnLeVs2DKO0UGYCSNevvItPxBnBUOb_iFW-CcVcgiUeLvmrXKkpObQBs9oKRW6aaEAfbIVcx1MHO5htiysoP1o1W7eg_DmJrX_",
-              }}
-              resizeMode="cover"
-              className="h-full w-full opacity-40"
-            />
-          </View>
-          <BlurView
-            intensity={10}
-            tint="light"
-            style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}
-          />
-          <View className="absolute inset-0 bg-surface-container-highest/30" />
-
           <View className="relative z-20 w-full max-w-[400px] items-center rounded-3xl border border-outline-variant bg-surface p-stack-md shadow-lg">
             <View className="relative mb-stack-sm h-20 w-20 items-center justify-center">
               <View className="absolute inset-0 rounded-full border-4 border-primary/20" />
