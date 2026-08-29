@@ -246,7 +246,7 @@ export default function DriverSettingsScreen() {
             Driver Portal
           </Text>
           <Pressable
-            onPress={() => router.push("/(driver)/(drawer)/notifications")}
+            onPress={() => router.push("/(driver)/notifications")}
             className="items-center justify-center rounded-full p-2 active:scale-95"
           >
             <MaterialIcons name="notifications" size={24} color={themeColors.onSurfaceVariant} />
@@ -299,7 +299,7 @@ export default function DriverSettingsScreen() {
             </View>
             <View className="mt-6 gap-2">
               <Pressable
-                onPress={() => router.push("/(driver)/(drawer)/help-center")}
+                onPress={() => router.push("/(driver)/help-center")}
                 className="flex-row items-center justify-between rounded-lg border border-transparent p-4"
               >
                 <View className="flex-row items-center gap-3">

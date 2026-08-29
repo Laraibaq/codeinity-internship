@@ -910,14 +910,13 @@ export default function DriverVerificationStatusScreen() {
             <View className="mt-auto w-full pb-stack-lg pt-stack-sm">
               {/* Fixed broken route: this pointed at "/(driver)/home", which never existed --
                   dashboard.tsx (the real tab screen with the online/offline toggle) now exists
-                  at "/(driver)/(drawer)/(tabs)/dashboard", per the ride-flow batch. "Go Online" now
-                  flips that toggle directly via the `status` param (same mechanism
-                  ride-completed.tsx uses to reset it), instead of just navigating there and
-                  leaving it offline. */}
+                  at "/(driver)/(tabs)/dashboard", per the ride-flow batch. "Go Online" now flips
+                  that toggle directly via the `status` param (same mechanism ride-completed.tsx
+                  uses to reset it), instead of just navigating there and leaving it offline. */}
               <Pressable
                 onPress={() =>
                   router.push({
-                    pathname: "/(driver)/(drawer)/(tabs)/dashboard",
+                    pathname: "/(driver)/(tabs)/dashboard",
                     params: { status: "online" },
                   })
                 }
@@ -934,7 +933,7 @@ export default function DriverVerificationStatusScreen() {
                 <MaterialIcons name="arrow-forward" size={20} color={themeColors.onPrimary} />
               </Pressable>
               <Pressable
-                onPress={() => router.push("/(driver)/(drawer)/(tabs)/dashboard")}
+                onPress={() => router.push("/(driver)/(tabs)/dashboard")}
                 className="mt-stack-sm h-12 w-full items-center justify-center rounded-full active:scale-95"
               >
                 <Text className="font-label-sm text-label-sm text-primary">Go to Dashboard</Text>

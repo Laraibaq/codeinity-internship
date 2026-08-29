@@ -154,7 +154,7 @@ export default function DriverLoginScreen() {
             </View>
 
             <Pressable
-              onPress={() => router.replace("/(driver)/(drawer)/(tabs)/dashboard")}
+              onPress={() => router.replace("/(driver)/(tabs)/dashboard")}
               className="mt-stack-lg h-[56px] w-full flex-row items-center justify-center rounded-lg bg-primary active:scale-[0.98]"
               style={{
                 shadowColor: "#000000",
