@@ -5,30 +5,19 @@ import { Pressable } from "react-native";
 
 import { themeColors } from "@/constants/theme-colors";
 
-// Tab bar visual style matches the bottom nav shown consistently across this batch's source HTML
-// (Earnings Dashboard, Ride History, Driver Profile): 4 tabs -- Dashboard, Earnings, History,
-// Account -- each an icon+label column, with the ACTIVE tab additionally wrapped in a
-// `bg-primary-container rounded-full px-5 py-1` pill (inactive tabs are plain `text-secondary`).
+// Bottom tab bar trimmed to the 3 screens a driver checks constantly -- Dashboard (map/status),
+// Earnings (money), Account (profile). History moved out to the sidebar (this group's parent
+// Drawer, see (drawer)/_layout.tsx): it's a look-back action, not something checked every few
+// minutes the way these three are, so it fits better as a menu item than a 4th persistent tab.
 //
 // Rule 3 substitution: React Navigation's built-in `tabBarActiveBackgroundColor` only fills the
 // entire rectangular tab slot, with no way to scope a rounded pill to just the icon+label; a
-// custom `tabBarButton` reproduces the source's exact pill shape instead.
+// custom `tabBarButton` reproduces that pill shape instead.
 //
-// The source also gives the active tab's icon `font-variation-settings: 'FILL' 1` (a bolder/filled
-// glyph) on top of the pill and color change. The classic Material Icons font MaterialIcons wraps
-// has no variable fill weight (unlike Material Symbols) -- every glyph is a single fixed style --
-// so that part of the source's active-state treatment has no equivalent here; the pill background
-// and tint-color swap (already implemented) carry the "active" signal on their own instead.
-// Fixed: className used to interpolate `focused ? "mx-2 rounded-full bg-primary-container" : ""`
-// into a template literal -- the same NativeWind runtime anti-pattern root-caused on login.tsx's
-// phone/email toggle (a conditionally-shaped className triggers a lazy component "upgrade" +
-// remount that crashes native navigation). This component is especially significant: it's plugged
-// directly into React Navigation's own tab-bar rendering via `tabBarButton` (see below), and it's
-// the persistent chrome mounted the entire time any tab screen -- including dashboard.tsx -- is on
-// screen, unlike a screen-local conditional that only affects a subtree the user isn't necessarily
-// interacting with. className is now static; the focused-dependent background/margin/radius moves
-// to a plain `style` prop instead, same fix as @/components/login-method-toggle.tsx's
-// activeSegmentStyle.
+// className below is static (not interpolated into a template literal): a conditionally-shaped
+// className triggers a lazy component "upgrade" + remount that crashes native navigation, the same
+// NativeWind runtime anti-pattern root-caused on login.tsx's phone/email toggle. The
+// focused-dependent background/margin/radius moves to a plain `style` prop instead.
 const focusedTabStyle = {
   marginHorizontal: 8,
   borderRadius: 9999,
@@ -38,9 +27,6 @@ const focusedTabStyle = {
 function TabBarButton({ children, onPress, accessibilityState }: BottomTabBarButtonProps) {
   const focused = accessibilityState?.selected ?? false;
   return (
-    // Only children/onPress/accessibilityState are forwarded (not the rest of
-    // BottomTabBarButtonProps): it's typed against PlatformPressable, whose `ref` type doesn't
-    // match plain RN Pressable's, so spreading the remaining props onto Pressable fails to typecheck.
     <Pressable
       onPress={onPress}
       accessibilityState={accessibilityState}
@@ -87,13 +73,6 @@ export default function DriverTabsLayout() {
         options={{
           title: "Earnings",
           tabBarIcon: ({ color }) => <MaterialIcons name="payments" size={24} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="history"
-        options={{
-          title: "History",
-          tabBarIcon: ({ color }) => <MaterialIcons name="history" size={24} color={color} />,
         }}
       />
       <Tabs.Screen

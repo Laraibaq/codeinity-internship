@@ -35,7 +35,7 @@ const REASONS = [
 // `useState<string | null>` driving `disabled` directly. This is real, simple UI state (a selection
 // gate), not the kind of backend logic rule 5 excludes.
 //
-// "Submit Feedback" uses `router.dismissTo` back to (driver)/(tabs)/dashboard, same reasoning as
+// "Submit Feedback" uses `router.dismissTo` back to (driver)/(drawer)/(tabs)/dashboard, same reasoning as
 // ride-completed.tsx's existing usage: this screen can be reached after either ride-request-detail
 // (itself reached via a `replace`d notification) or directly from the notification modal, so the
 // stack above dashboard.tsx can be 1-2 screens deep depending on the path -- `dismissTo` clears
@@ -107,7 +107,10 @@ export default function RejectReasonScreen() {
           <Pressable
             disabled={!selected}
             onPress={() =>
-              router.dismissTo({ pathname: "/(driver)/(tabs)/dashboard", params: { status: "online" } })
+              router.dismissTo({
+                pathname: "/(driver)/(drawer)/(tabs)/dashboard",
+                params: { status: "online" },
+              })
             }
             className="h-14 w-full items-center justify-center rounded-xl bg-primary shadow-sm active:scale-[0.98]"
             style={selected ? undefined : { opacity: 0.5 }}

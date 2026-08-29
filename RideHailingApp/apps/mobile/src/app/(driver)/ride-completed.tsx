@@ -46,7 +46,10 @@ export default function RideCompletedScreen() {
   const router = useRouter();
 
   const backToDashboard = () =>
-    router.dismissTo({ pathname: "/(driver)/(tabs)/dashboard", params: { status: "online" } });
+    router.dismissTo({
+      pathname: "/(driver)/(drawer)/(tabs)/dashboard",
+      params: { status: "online" },
+    });
 
   return (
     <View className="relative flex-1 overflow-hidden bg-surface">
