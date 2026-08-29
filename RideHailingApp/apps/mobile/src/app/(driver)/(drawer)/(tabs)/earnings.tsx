@@ -5,6 +5,7 @@ import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { themeColors } from "@/constants/theme-colors";
+import { useOpenDrawer } from "@/hooks/use-open-drawer";
 import { formatCurrency } from "@/utils/currency";
 
 type Period = "daily" | "weekly" | "monthly";
@@ -96,6 +97,7 @@ function FinanceChart({ data }: { data: FinanceBucket[] }) {
 export default function DriverEarningsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const openDrawer = useOpenDrawer();
   const [period, setPeriod] = useState<Period>("daily");
 
   const buckets = FINANCE_DATA[period];
@@ -110,7 +112,7 @@ export default function DriverEarningsScreen() {
       <View style={{ paddingTop: insets.top }} className="z-40 w-full bg-surface shadow-sm">
         <View className="w-full flex-row items-center justify-between px-container-margin py-base">
           <Pressable
-            onPress={() => router.push("/(driver)/notifications")}
+            onPress={() => router.push("/(driver)/(drawer)/notifications")}
             className="items-center justify-center rounded-full p-2 active:scale-95"
           >
             <MaterialIcons name="notifications" size={24} color={themeColors.primary} />
@@ -119,10 +121,10 @@ export default function DriverEarningsScreen() {
             Driver Portal
           </Text>
           <Pressable
-            onPress={() => router.push("/(driver)/settings")}
+            onPress={openDrawer}
             className="items-center justify-center rounded-full p-2 active:scale-95"
           >
-            <MaterialIcons name="settings" size={24} color={themeColors.primary} />
+            <MaterialIcons name="menu" size={24} color={themeColors.primary} />
           </Pressable>
         </View>
       </View>

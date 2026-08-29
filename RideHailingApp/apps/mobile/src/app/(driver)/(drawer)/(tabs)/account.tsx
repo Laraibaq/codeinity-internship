@@ -4,6 +4,7 @@ import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { themeColors } from "@/constants/theme-colors";
+import { useOpenDrawer } from "@/hooks/use-open-drawer";
 
 // Rule 3 substitutions used on this screen:
 // - Icon-ligature -> MaterialIcons substitution as on every screen in this project; every icon
@@ -43,21 +44,25 @@ import { themeColors } from "@/constants/theme-colors";
 // - Earnings Settings -> Earnings tab (push). Real payout-method configuration is explicitly
 //   deferred to MVP3 per this project's cash-only policy (see src/utils/currency.ts header
 //   comment), so this redirects to Earnings instead of doing nothing.
-// - Header settings icon -> settings.tsx (push). Icon changed from "menu" to "settings": a
-//   hamburger icon implies a nav drawer this app doesn't have, and it doesn't open one -- it pushes
-//   straight to Settings, so the icon should say that.
-// - Header notifications bell -> notifications.tsx (push); new screen, mock data (no backend yet).
+// - Header gear icon -> opens the sidebar (Drawer, see (drawer)/_layout.tsx), which is where
+//   Settings now lives as a menu item alongside History/Ratings & Reviews/Notifications/Help
+//   Center. Previously pushed straight to settings.tsx directly; now that a real drawer exists,
+//   funneling every secondary destination through one menu is the more standard driver-app pattern.
+// - Header notifications bell -> notifications.tsx (push, now a sidebar screen); kept as a direct
+//   shortcut rather than folded into the drawer too, since notifications are checked far more often
+//   than any other sidebar item and deserve their own one-tap icon.
 
 export default function DriverAccountScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const openDrawer = useOpenDrawer();
 
   return (
     <View className="flex-1 bg-background">
       <View style={{ paddingTop: insets.top }} className="w-full bg-surface shadow-sm">
         <View className="w-full flex-row items-center justify-between px-container-margin py-base">
           <Pressable
-            onPress={() => router.push("/(driver)/notifications")}
+            onPress={() => router.push("/(driver)/(drawer)/notifications")}
             className="items-center justify-center rounded-full p-2 active:scale-95"
           >
             <MaterialIcons name="notifications" size={24} color={themeColors.primary} />
@@ -66,10 +71,10 @@ export default function DriverAccountScreen() {
             Driver Portal
           </Text>
           <Pressable
-            onPress={() => router.push("/(driver)/settings")}
+            onPress={openDrawer}
             className="items-center justify-center rounded-full p-2 active:scale-95"
           >
-            <MaterialIcons name="settings" size={24} color={themeColors.primary} />
+            <MaterialIcons name="menu" size={24} color={themeColors.primary} />
           </Pressable>
         </View>
       </View>
@@ -185,7 +190,7 @@ export default function DriverAccountScreen() {
           </Pressable>
 
           <Pressable
-            onPress={() => router.push("/(driver)/ratings-reviews")}
+            onPress={() => router.push("/(driver)/(drawer)/ratings-reviews")}
             className="w-full flex-row items-center justify-between rounded-xl border border-surface-container-highest bg-surface-container-lowest p-4 shadow-sm active:scale-[0.98]"
           >
             <View className="flex-row items-center gap-4">
@@ -208,7 +213,7 @@ export default function DriverAccountScreen() {
               policy (see src/utils/currency.ts header comment) -- this redirects to the Earnings
               tab instead of doing nothing, until that real settings screen exists. */}
           <Pressable
-            onPress={() => router.push("/(driver)/(tabs)/earnings")}
+            onPress={() => router.push("/(driver)/(drawer)/(tabs)/earnings")}
             className="w-full flex-row items-center justify-between rounded-xl border border-surface-container-highest bg-surface-container-lowest p-4 shadow-sm active:scale-[0.98]"
           >
             <View className="flex-row items-center gap-4">
