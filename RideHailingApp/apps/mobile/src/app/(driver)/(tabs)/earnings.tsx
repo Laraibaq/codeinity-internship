@@ -113,12 +113,15 @@ export default function DriverEarningsScreen() {
             onPress={() => router.push("/(driver)/settings")}
             className="items-center justify-center rounded-full p-2 active:scale-95"
           >
-            <MaterialIcons name="menu" size={24} color={themeColors.primary} />
+            <MaterialIcons name="settings" size={24} color={themeColors.primary} />
           </Pressable>
           <Text className="font-headline-lg-mobile text-headline-lg-mobile font-bold text-primary">
             Driver Portal
           </Text>
-          <Pressable className="items-center justify-center rounded-full p-2 active:scale-95">
+          <Pressable
+            onPress={() => router.push("/(driver)/notifications")}
+            className="items-center justify-center rounded-full p-2 active:scale-95"
+          >
             <MaterialIcons name="notifications" size={24} color={themeColors.primary} />
           </Pressable>
         </View>
@@ -128,21 +131,6 @@ export default function DriverEarningsScreen() {
         className="flex-1"
         contentContainerClassName="mx-auto w-full max-w-4xl gap-gutter px-container-margin pb-32 pt-stack-md"
       >
-        <View className="gap-stack-md rounded-xl border border-outline-variant/30 bg-white p-stack-md shadow-sm">
-          <Text className="font-label-sm text-label-sm uppercase tracking-wider text-on-surface-variant">
-            Available to Withdraw
-          </Text>
-          <Text className="font-display-lg text-display-lg text-on-surface">
-            {formatCurrency(1248.5)}
-          </Text>
-          {/* TODO: payout/withdrawal flow deferred to MVP3 per cash-only policy (src/utils/currency.ts). */}
-          <Pressable className="w-full items-center rounded-full bg-primary px-8 py-3 shadow-sm active:scale-95">
-            <Text className="font-body-md text-body-md font-semibold text-on-primary">
-              Withdraw
-            </Text>
-          </Pressable>
-        </View>
-
         <View className="flex-row gap-2 rounded-full bg-surface-container-highest p-1">
           {PERIOD_OPTIONS.map((option) => {
             const active = option.key === period;
