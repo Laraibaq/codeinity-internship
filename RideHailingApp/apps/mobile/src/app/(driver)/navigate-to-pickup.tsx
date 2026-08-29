@@ -68,10 +68,12 @@ import { formatCurrency } from "@/utils/currency";
 // Expanded-only content: the pickup/dropoff timeline reuses ride-request-notification.tsx's exact
 // two-stop visual pattern (connector line + pickup dot + dropoff flag) rather than inventing a new
 // one; dropoff address ("Pier 39, Fisherman's Wharf") matches the same fictitious ride already used
-// on ride-request-notification.tsx/ride-request-detail.tsx for continuity. "Cancel Ride" and
-// "Share Ride" are new, per explicit instruction -- both inert Pressables with TODO comments,
-// matching this project's established pattern for not-yet-wired actions (no cancellation API and no
-// share/deep-link mechanism exist yet).
+// on ride-request-notification.tsx/ride-request-detail.tsx for continuity. "Cancel Ride" now calls
+// `handleCancelRide` (dismisses back to the dashboard, online/searching) -- there's still no real
+// cancellation API to notify the rider, but leaving this button inert entirely defeated the point of
+// a "cancel" action a driver is looking at right now. "Share Ride" stays an inert Pressable with a
+// TODO comment: no share/deep-link mechanism exists yet, and unlike Cancel there's no frontend-only
+// fallback that means anything for it.
 //
 // "I've Arrived" -> active-ride.tsx, unchanged. Chat and call icon buttons remain inert with their
 // original TODOs (no in-app messaging screen, no telephony wired).
@@ -115,6 +117,18 @@ export default function NavigateToPickupScreen() {
   const fare = Number.isFinite(parsedFare) && parsedFare > 0 ? parsedFare : DEFAULT_FARE;
   const pickupLabel = params.pickup || DEFAULT_PICKUP;
   const dropoffLabel = params.dropoff || DEFAULT_DROPOFF;
+
+  // No cancellation API exists yet (no backend endpoint to notify the rider/mark the ride
+  // cancelled) -- this at least does the one thing that's actually in the driver's control on the
+  // frontend: leave this screen and return to a searching dashboard, the same outcome Reject
+  // already gives a request that's never accepted. `dismissTo` (not `push`) so this pickup screen
+  // doesn't linger one swipe-back away after cancelling.
+  const handleCancelRide = () => {
+    router.dismissTo({
+      pathname: "/(driver)/(drawer)/(tabs)/dashboard",
+      params: { status: "online" },
+    });
+  };
 
   const defaultHeight = screenHeight * DEFAULT_HEIGHT_RATIO;
   const expandedHeight = screenHeight * EXPANDED_HEIGHT_RATIO;
@@ -340,8 +354,10 @@ export default function NavigateToPickupScreen() {
             </View>
 
             <View className="flex-row gap-3">
-              {/* TODO: no cancellation API/flow exists yet -- this is a UI-shell placeholder. */}
-              <Pressable className="h-12 flex-1 items-center justify-center rounded-lg border border-error bg-transparent active:scale-[0.98]">
+              <Pressable
+                onPress={handleCancelRide}
+                className="h-12 flex-1 items-center justify-center rounded-lg border border-error bg-transparent active:scale-[0.98]"
+              >
                 <Text className="font-label-sm text-label-sm text-error">Cancel Ride</Text>
               </Pressable>
               {/* TODO: no share/deep-link mechanism exists yet -- this is a UI-shell placeholder. */}
