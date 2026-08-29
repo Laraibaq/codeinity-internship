@@ -94,13 +94,15 @@ export default function DriverHistoryScreen() {
             onPress={() => router.push("/(driver)/settings")}
             className="-ml-2 items-center justify-center rounded-full p-2 active:scale-95"
           >
-            <MaterialIcons name="menu" size={24} color={themeColors.primary} />
+            <MaterialIcons name="settings" size={24} color={themeColors.primary} />
           </Pressable>
           <Text className="flex-1 text-center font-headline-lg-mobile text-headline-lg-mobile font-bold text-primary">
             History
           </Text>
-          {/* TODO: no destination specified for the notifications bell. */}
-          <Pressable className="-mr-2 items-center justify-center rounded-full p-2 active:scale-95">
+          <Pressable
+            onPress={() => router.push("/(driver)/notifications")}
+            className="-mr-2 items-center justify-center rounded-full p-2 active:scale-95"
+          >
             <MaterialIcons name="notifications" size={24} color={themeColors.primary} />
           </Pressable>
         </View>

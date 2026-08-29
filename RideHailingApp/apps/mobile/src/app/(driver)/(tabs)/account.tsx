@@ -30,17 +30,22 @@ import { themeColors } from "@/constants/theme-colors";
 //   static, unconditional indicator, same as every other "badge implies real state we don't compute
 //   yet" case in this project (rule 5, UI shell only).
 //
-// Menu-item wiring per this task's instructions:
-// - Personal Information -> register-personal-info.tsx (push)
-// - Vehicle Profile -> register-vehicle-type.tsx (push) -- was register-vehicle-info.tsx, deleted
-//   when it was removed from the registration flow; register-vehicle-type.tsx is now the first
-//   screen of the vehicle section, so it's the closest replacement destination.
+// Menu-item wiring:
+// - Personal Information -> edit-personal-info.tsx (push). NOT register-personal-info.tsx: that
+//   screen is step 2 of the 10-step sign-up wizard (its own "Continue" pushes further into
+//   onboarding), which meant tapping this from Account dropped an already-registered driver back
+//   into the middle of sign-up with no way out. edit-personal-info.tsx is a real, standalone
+//   profile editor instead.
+// - Vehicle Profile -> vehicle-profile.tsx (push). Same fix, same reason: register-vehicle-type.tsx
+//   is step 7 of onboarding and pushes on to register-vehicle-model.tsx next.
 // - Documents -> verification-status.tsx (push, default "review" state), per explicit confirmation.
-// - Ratings & Reviews -> left inert with a TODO; no screen built yet.
+// - Ratings & Reviews -> ratings-reviews.tsx (push); new screen, mock data (no backend yet).
 // - Earnings Settings -> left inert with a TODO; per this project's cash-only MVP1 policy, payout-
 //   method configuration is explicitly deferred to MVP3 (see src/utils/currency.ts header comment).
-// - Header menu icon -> settings.tsx (push).
-// - Header notifications bell -> left inert; no destination specified for it anywhere in this task.
+// - Header settings icon -> settings.tsx (push). Icon changed from "menu" to "settings": a
+//   hamburger icon implies a nav drawer this app doesn't have, and it doesn't open one -- it pushes
+//   straight to Settings, so the icon should say that.
+// - Header notifications bell -> notifications.tsx (push); new screen, mock data (no backend yet).
 
 export default function DriverAccountScreen() {
   const router = useRouter();
@@ -54,13 +59,15 @@ export default function DriverAccountScreen() {
             onPress={() => router.push("/(driver)/settings")}
             className="items-center justify-center rounded-full p-2 active:scale-95"
           >
-            <MaterialIcons name="menu" size={24} color={themeColors.primary} />
+            <MaterialIcons name="settings" size={24} color={themeColors.primary} />
           </Pressable>
           <Text className="font-headline-lg-mobile text-headline-lg-mobile font-bold text-primary">
             Driver Portal
           </Text>
-          {/* TODO: no destination specified for the notifications bell. */}
-          <Pressable className="items-center justify-center rounded-full p-2 active:scale-95">
+          <Pressable
+            onPress={() => router.push("/(driver)/notifications")}
+            className="items-center justify-center rounded-full p-2 active:scale-95"
+          >
             <MaterialIcons name="notifications" size={24} color={themeColors.primary} />
           </Pressable>
         </View>
@@ -114,7 +121,7 @@ export default function DriverAccountScreen() {
 
         <View className="gap-gutter">
           <Pressable
-            onPress={() => router.push("/(driver-auth)/register-personal-info")}
+            onPress={() => router.push("/(driver)/edit-personal-info")}
             className="w-full flex-row items-center justify-between rounded-xl border border-surface-container-highest bg-surface-container-lowest p-4 shadow-sm active:scale-[0.98]"
           >
             <View className="flex-row items-center gap-4">
@@ -134,7 +141,7 @@ export default function DriverAccountScreen() {
           </Pressable>
 
           <Pressable
-            onPress={() => router.push("/(driver-auth)/register-vehicle-type")}
+            onPress={() => router.push("/(driver)/vehicle-profile")}
             className="w-full flex-row items-center justify-between rounded-xl border border-surface-container-highest bg-surface-container-lowest p-4 shadow-sm active:scale-[0.98]"
           >
             <View className="flex-row items-center gap-4">
@@ -176,8 +183,10 @@ export default function DriverAccountScreen() {
             </View>
           </Pressable>
 
-          {/* TODO: no screen built yet for ratings/reviews. */}
-          <Pressable className="w-full flex-row items-center justify-between rounded-xl border border-surface-container-highest bg-surface-container-lowest p-4 shadow-sm active:scale-[0.98]">
+          <Pressable
+            onPress={() => router.push("/(driver)/ratings-reviews")}
+            className="w-full flex-row items-center justify-between rounded-xl border border-surface-container-highest bg-surface-container-lowest p-4 shadow-sm active:scale-[0.98]"
+          >
             <View className="flex-row items-center gap-4">
               <View className="h-12 w-12 items-center justify-center rounded-full bg-surface-container">
                 <MaterialIcons name="reviews" size={24} color={themeColors.primary} />

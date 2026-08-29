@@ -82,8 +82,10 @@ export default function DriverSettingsScreen() {
           <Text className="font-headline-lg-mobile text-headline-lg-mobile font-bold text-primary">
             Driver Portal
           </Text>
-          {/* TODO: no destination specified for the notifications bell. */}
-          <Pressable className="items-center justify-center rounded-full p-2 active:scale-95">
+          <Pressable
+            onPress={() => router.push("/(driver)/notifications")}
+            className="items-center justify-center rounded-full p-2 active:scale-95"
+          >
             <MaterialIcons name="notifications" size={24} color={themeColors.onSurfaceVariant} />
           </Pressable>
         </View>
