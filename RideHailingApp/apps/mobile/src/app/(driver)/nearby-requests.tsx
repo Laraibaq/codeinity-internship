@@ -72,11 +72,12 @@ const initialRequests: RequestRow[] = [
 //   that's actually driving this screen's own new interactive behavior.
 // - The mobile "Map" toggle button is inert with a TODO: no map view of these requests exists yet.
 //
-// Each row's "Accept" -> passenger-accepted.tsx (skipping any detail screen), matching
-// ride-request-notification.tsx and ride-request-detail.tsx's Accept buttons -- all three now go
-// through that celebratory hand-off screen first, whose own "Start Navigation" button continues on
-// to navigate-to-pickup.tsx. Each row's "X" removes that row from local state only -- no backend
-// call exists to actually decline a nearby request yet.
+// Each row's "Accept" -> navigate-to-pickup.tsx directly (skipping any detail screen), matching
+// ride-request-notification.tsx and ride-request-detail.tsx's Accept buttons. All three used to go
+// through passenger-accepted.tsx, a celebratory hand-off screen, first; that screen has been deleted
+// and its content folded into navigate-to-pickup.tsx's bottom sheet's collapsed "peek" state instead.
+// Each row's "X" removes that row from local state only -- no backend call exists to actually
+// decline a nearby request yet.
 // Back arrow -> router.back().
 export default function NearbyRequestsScreen() {
   const router = useRouter();
@@ -191,7 +192,7 @@ export default function NearbyRequestsScreen() {
 
               <View className="mt-4 flex-row gap-2 border-t border-outline-variant/20 pt-3">
                 <Pressable
-                  onPress={() => router.push("/(driver)/passenger-accepted")}
+                  onPress={() => router.push("/(driver)/navigate-to-pickup")}
                   className={`flex-1 items-center justify-center rounded-lg py-3 active:scale-[0.98] ${
                     request.accentPrimary
                       ? "bg-primary shadow-sm"

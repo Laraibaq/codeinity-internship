@@ -20,10 +20,16 @@ type OnlineView = "searching" | "no-requests";
 // Reset-to-"online" from ride-completed.tsx: passed via the `status` route param rather than a new
 // global store -- this is the only cross-screen state this flow needs, and expo-router params are
 // already the mechanism `verification-status.tsx`'s "Go Online" button uses (see that file), so a
-// second mechanism (context/zustand/etc.) would be redundant for a single boolean. Neither of this
-// screen's own "Go Online"/"Go Offline" buttons flips `status` directly anymore -- both instead
-// open a confirmation modal (go-online-confirm.tsx / go-offline-confirm.tsx) whose own confirm
-// button is what calls `setStatus`, via this same `status` param.
+// second mechanism (context/zustand/etc.) would be redundant for a single boolean. The `status`
+// param/useEffect mechanism below is still needed for those two external callers even though this
+// screen's own buttons no longer use it (see next paragraph).
+//
+// Fixed: this screen's own "Go Online"/"Go Offline" buttons used to open a confirmation modal
+// (go-online-confirm.tsx / go-offline-confirm.tsx) instead of flipping `status` directly -- both
+// screens have been deleted entirely per explicit instruction (a pure UX simplification, confirmed
+// unrelated to an earlier, separate native-crash investigation that also touched those two files).
+// Both buttons below now call `setStatus` directly, cross-fading via the same
+// `LayoutAnimation.easeInEaseOut` the `status`-param effect below already used.
 //
 // Rule 3 substitutions used on this screen:
 // - Icon-ligature -> MaterialIcons substitution as on every screen in this project; every icon
@@ -80,10 +86,10 @@ export default function DriverDashboardScreen() {
 
   // Fixed: the online<->offline swap (and the nested searching<->no-requests swap below) used to
   // be an instant hard content-swap with zero feedback. Both now cross-fade via
-  // `LayoutAnimation.easeInEaseOut` instead of popping instantly. No loading spinner here (unlike
-  // verification-status.tsx/counter-offer.tsx's submit buttons): the actual confirmation step
-  // already happened on go-online-confirm.tsx/go-offline-confirm.tsx before this screen ever
-  // re-renders, so there's nothing left on this screen to show as "submitting."
+  // `LayoutAnimation.easeInEaseOut` instead of popping instantly. This effect only fires for the
+  // two external callers (verification-status.tsx, ride-completed.tsx) that still navigate here via
+  // the `status` param; this screen's own Go Online/Go Offline buttons call `setStatus` directly
+  // (see below) and don't round-trip through this param at all.
   useEffect(() => {
     if (params.status === "online" || params.status === "offline") {
       LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -95,14 +101,14 @@ export default function DriverDashboardScreen() {
     return (
       <View className="flex-1 bg-surface">
         <View className="relative flex-1 overflow-hidden bg-surface-container-low">
-          <Image
-            source={{
-              uri: "https://lh3.googleusercontent.com/aida-public/AB6AXuDlrVlMJyKljfM_yhgv5yO-iFAsoOY5_R6UdnL84cJXV5N1sHcMNZpArFIO7o9Zgz5Px0d8uXf4QEISn_cRzYc6aap82ERndGT8WYmD-77giW1oEX_ci9u3AwLy_JSzTxZBpewsvShZ5lS1SxnCw_HYiz0-gpOOnCNsPOrg7zXf1aJGbn8wZCrnYujyOM50QcxGRgY_dBP4QVzGKV8ZwXrrsqL03RxwqYwaC_6Un-KSxOLICoef272z",
-            }}
-            resizeMode="cover"
-            className="absolute inset-0 h-full w-full opacity-60"
-          />
-
+          {/* Fixed: this used to be a static street-map <Image> filling the whole screen. Removed
+              entirely per explicit instruction, replaced with nothing but this View's own flat
+              `bg-surface-container-low` fill (already a design token, so no extra layer is needed).
+              The driver-marker dot and (in the "no-requests" branch below) the decorative heatmap
+              blobs were originally map-relative annotations; their own removal wasn't asked for, so
+              they're left in place -- they now read as plain floating decoration on a flat
+              background rather than map pins, which may not be the intended look. Flagging in case
+              those should come out too. */}
           <View className="absolute left-1/2 top-1/2 h-12 w-12 -translate-x-1/2 -translate-y-1/2 items-center justify-center">
             <View className="h-6 w-6 items-center justify-center rounded-full border-2 border-white bg-primary shadow-lg">
               <MaterialIcons name="directions-car" size={14} color="#ffffff" />
@@ -122,10 +128,11 @@ export default function DriverDashboardScreen() {
                   ONLINE
                 </Text>
               </View>
-              {/* Opens go-offline-confirm.tsx (modal) instead of flipping `status` directly, same
-                  treatment as the offline state's "Go Online" button above. */}
               <Pressable
-                onPress={() => router.push("/(driver)/go-offline-confirm")}
+                onPress={() => {
+                  LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                  setStatus("offline");
+                }}
                 className="flex-row items-center gap-2 rounded-full bg-surface-container px-4 py-2 active:scale-95"
               >
                 <MaterialIcons name="power-settings-new" size={16} color={themeColors.onSurfaceVariant} />
@@ -155,8 +162,21 @@ export default function DriverDashboardScreen() {
 
           {onlineView === "searching" ? (
             <>
+              {/* Fixed: this card used to sit near the bottom (`absolute bottom-24`). Recentered
+                  vertically per explicit instruction, "same centering approach as
+                  forgot-password.tsx's content." That file's own header comment says its
+                  flexGrow/justifyContent:'center' centering was deliberately REMOVED in an earlier,
+                  separate pass (reverted back to natural top-of-screen flow at explicit request) --
+                  so there's no longer a live example of that pattern to copy verbatim from that
+                  file. Flagging this discrepancy rather than silently guessing. What's implemented
+                  here is the same underlying idea (flex-centering within the available space) applied
+                  directly: this card isn't inside a ScrollView at all (it's an absolutely-positioned
+                  overlay, not scrollable document content), so instead of a ScrollView's
+                  contentContainerStyle flexGrow+justifyContent:'center', an
+                  `absolute inset-0 justify-center items-center` wrapper achieves the equivalent
+                  centering-within-the-full-available-space for this non-scrolling case. */}
               <View
-                className="absolute bottom-24 left-0 right-0 z-30 items-center px-container-margin"
+                className="absolute inset-0 z-30 items-center justify-center px-container-margin"
                 pointerEvents="none"
               >
                 <View className="w-full max-w-sm items-center gap-2 rounded-2xl border border-outline-variant/30 bg-surface/90 px-6 py-4 shadow-lg">
@@ -325,12 +345,11 @@ export default function DriverDashboardScreen() {
           </View>
 
           <View className="w-full max-w-md px-container-margin pb-stack-md">
-            {/* Opens go-online-confirm.tsx (modal) instead of flipping `status` directly, per
-                that screen's batch. The modal's own "Go Online" button is what actually calls
-                setStatus, via the same `status` route param mechanism ride-completed.tsx and
-                verification-status.tsx already use to reset this screen to "online". */}
             <Pressable
-              onPress={() => router.push("/(driver)/go-online-confirm")}
+              onPress={() => {
+                LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                setStatus("online");
+              }}
               className="w-full flex-row items-center justify-center gap-3 rounded-xl bg-primary py-4 shadow-sm active:scale-[0.98]"
             >
               <MaterialIcons name="power-settings-new" size={24} color={themeColors.onPrimary} />

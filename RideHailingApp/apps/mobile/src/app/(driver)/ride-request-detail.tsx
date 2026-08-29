@@ -26,9 +26,10 @@ import { formatCurrency } from "@/utils/currency";
 // - `hover:*` / `transition-*` / `duration-*` dropped throughout: no hover state on touch devices.
 //
 // Navigation:
-// - Accept Ride -> passenger-accepted.tsx (a brief celebratory hand-off screen, per that screen's
-//   comparison against navigate-to-pickup.tsx); its own "Start Navigation" button continues on to
-//   navigate-to-pickup.tsx -- this used to go there directly, that's now one hop later.
+// - Accept Ride -> navigate-to-pickup.tsx directly. passenger-accepted.tsx (a brief celebratory
+//   hand-off screen this used to go through first) has been deleted -- its content is now folded
+//   into navigate-to-pickup.tsx's bottom sheet's collapsed "peek" state instead of being its own
+//   screen.
 // - Counter -> counter-offer.tsx (modal, shared with the notification screen's Counter button).
 // - Decline -> reject-reason.tsx (push), per that screen's batch -- previously called
 //   `router.back()` directly (see stack-depth note above for why that landed correctly on
@@ -163,7 +164,7 @@ export default function RideRequestDetailScreen() {
 
           <View className="mt-auto flex-row flex-wrap gap-3">
             <Pressable
-              onPress={() => router.push("/(driver)/passenger-accepted")}
+              onPress={() => router.push("/(driver)/navigate-to-pickup")}
               className="w-full items-center justify-center rounded-xl bg-primary py-4 shadow-md active:scale-95"
             >
               <Text className="font-bold text-on-primary">Accept Ride</Text>
