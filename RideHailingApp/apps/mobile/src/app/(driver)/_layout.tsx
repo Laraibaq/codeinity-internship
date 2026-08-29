@@ -10,6 +10,10 @@ import { Stack } from "expo-router";
 // content (passenger info, offer, pickup/dropoff, Accept/Counter/Reject) now renders as inline cards
 // directly on dashboard.tsx's "online" state instead of a separate popup + pushed detail screen.
 //
+// nearby-requests.tsx has also been deleted entirely, fully superseded by those same inline request
+// cards -- it never had a Stack.Screen entry here (plain push presentation), so there was no
+// registration to remove, only the file and dashboard.tsx's "Nearby" button that opened it.
+//
 // counter-offer.tsx uses "transparentModal" instead of "modal": per explicit instruction, it should
 // render as ONLY its bottom-sheet card with no header/screen chrome, showing whichever screen opened
 // it (now dashboard.tsx's inline request cards) dimmed behind it rather than a blank opaque

@@ -193,16 +193,6 @@ export default function DriverDashboardScreen() {
             </View>
           </View>
 
-          <View className="mt-3 flex-row justify-end px-container-margin">
-            <Pressable
-              onPress={() => router.push("/(driver)/nearby-requests")}
-              className="flex-row items-center gap-2 rounded-full border border-outline-variant/20 bg-surface px-4 py-2 shadow-lg active:scale-95"
-            >
-              <MaterialIcons name="near-me" size={16} color={themeColors.primary} />
-              <Text className="font-label-sm text-label-sm text-on-surface">Nearby</Text>
-            </Pressable>
-          </View>
-
           {requests.length > 0 ? (
             <View className="mt-3 flex-1 px-container-margin">
               <View className="flex-row flex-wrap gap-2">

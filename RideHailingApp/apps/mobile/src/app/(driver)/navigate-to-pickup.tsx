@@ -16,10 +16,11 @@ import { formatCurrency } from "@/utils/currency";
 
 // Merged screen: passenger-accepted.tsx (a brief "Offer Accepted!" hand-off card) and this screen's
 // own prior content (live turn-by-turn navigation to the pickup) are one screen -- a single
-// full-screen map with a draggable bottom sheet. Both callers (ride-request-notification.tsx's
-// ACCEPT, ride-request-detail.tsx's Accept Ride, nearby-requests.tsx's row-level Accept) push
-// straight here; passenger-accepted.tsx has been deleted, its hand-off content folded into this
-// sheet's default "peek" state instead of being its own screen.
+// full-screen map with a draggable bottom sheet. dashboard.tsx's inline request cards' "Accept"
+// button pushes straight here; passenger-accepted.tsx has been deleted, its hand-off content folded
+// into this sheet's default "peek" state instead of being its own screen. (ride-request-
+// notification.tsx, ride-request-detail.tsx, and nearby-requests.tsx -- all former callers of this
+// screen -- have since been deleted too, superseded by dashboard.tsx's inline cards.)
 //
 // Map background: kept this screen's own pre-existing static map treatment (Image + route-line dots
 // + turn-instruction bar + my-location/volume-up controls) -- the turn-instruction bar and side
