@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Pressable, ScrollView, Switch, Text, View } from "react-native";
+import { Pressable, ScrollView, Switch, Text, TextInput, View } from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
 import * as SecureStore from "expo-secure-store";
 import { useRouter } from "expo-router";
@@ -46,16 +46,177 @@ const AUTH_TOKEN_KEY = "driverAuthToken";
 // - `hover:*` / `group-hover:*` / `transition-*` / `duration-*` dropped throughout: no hover state
 //   on touch devices.
 //
-// Wiring per this task's instructions:
-// - Phone/Email/Password "Update"/"Change" buttons: inert, TODO (no backend wiring yet).
-// - Help Center / Privacy Policy / Terms of Service: inert, TODO (no destinations given).
+// Wiring:
+// - Phone/Email "Update": tapping toggles the row into an inline edit field (EditableField below)
+//   with Save/Cancel. "Save" only updates local component state -- no backend exists yet to persist
+//   to, same "frontend-only, functional in the UI" pattern used elsewhere in this project.
+// - Password "Change": same inline-edit pattern, but with New/Confirm fields and a minimum-length +
+//   match check before it'll save (PasswordField below) -- local state only, same as above.
+// - Help Center -> help-center.tsx (push). Privacy Policy -> privacy-policy.tsx (push). Terms of
+//   Service -> terms-of-service.tsx (push). All three previously had no destination at all.
 // - "Sign Out": clears the (placeholder) SecureStore key and `router.replace`s to login.tsx --
 //   `replace` (not `push`) was used deliberately so signing out also clears the driver-app screens
-//   from the back stack, rather than leaving them one swipe-back away after logout.
+//   from the back stack, rather than leaving them one swipe-back away after logout. Moved to the
+//   very bottom of the screen (after Notifications), per explicit request -- destructive
+//   account-level actions read better as the last thing on the page, not sandwiched between two
+//   unrelated settings sections.
 // - Notifications: a simple list of 3 toggles with no backend meaning shown in the source (no
 //   submit button, nothing else reacting to their state) -- implemented as local `useState` per
 //   toggle, same presentation-state precedent as the gender/color/vehicle-type pickers elsewhere in
 //   this project. Defaults match the source's own `checked` attributes: Push on, Email on, SMS off.
+
+function EditableField({
+  label,
+  value,
+  onSave,
+  keyboardType = "default",
+}: {
+  label: string;
+  value: string;
+  onSave: (next: string) => void;
+  keyboardType?: "default" | "phone-pad" | "email-address";
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value);
+
+  if (editing) {
+    return (
+      <View className="gap-3 rounded-lg border border-primary bg-surface-container-low p-4">
+        <Text className="font-label-sm text-label-sm uppercase tracking-wider text-secondary">
+          {label}
+        </Text>
+        <TextInput
+          className="min-h-[48px] rounded-lg border border-outline-variant bg-surface-container-lowest px-4 font-body-md text-body-md text-on-surface"
+          value={draft}
+          onChangeText={setDraft}
+          keyboardType={keyboardType}
+          autoFocus
+        />
+        <View className="flex-row justify-end gap-2">
+          <Pressable onPress={() => setEditing(false)} className="rounded-lg px-4 py-2">
+            <Text className="font-body-md text-body-md text-secondary">Cancel</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => {
+              onSave(draft);
+              setEditing(false);
+            }}
+            className="rounded-lg bg-primary px-4 py-2"
+          >
+            <Text className="font-body-md text-body-md font-semibold text-on-primary">Save</Text>
+          </Pressable>
+        </View>
+      </View>
+    );
+  }
+
+  return (
+    <View className="flex-row items-center justify-between rounded-lg border border-surface-variant bg-surface-container-low p-4">
+      <View>
+        <Text className="mb-1 font-label-sm text-label-sm uppercase tracking-wider text-secondary">
+          {label}
+        </Text>
+        <Text className="font-body-md text-body-md text-on-surface">{value}</Text>
+      </View>
+      <Pressable
+        onPress={() => {
+          setDraft(value);
+          setEditing(true);
+        }}
+        className="rounded-lg bg-surface-container-highest px-4 py-2"
+      >
+        <Text className="font-body-md text-body-md text-primary">Update</Text>
+      </Pressable>
+    </View>
+  );
+}
+
+function PasswordField() {
+  const [editing, setEditing] = useState(false);
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [justSaved, setJustSaved] = useState(false);
+
+  const handleSave = () => {
+    if (newPassword.length < 6) {
+      setError("Password must be at least 6 characters.");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setError("Passwords do not match.");
+      return;
+    }
+    setError(null);
+    setNewPassword("");
+    setConfirmPassword("");
+    setEditing(false);
+    setJustSaved(true);
+    setTimeout(() => setJustSaved(false), 2000);
+  };
+
+  if (editing) {
+    return (
+      <View className="gap-3 rounded-lg border border-primary bg-surface-container-low p-4">
+        <Text className="font-label-sm text-label-sm uppercase tracking-wider text-secondary">
+          Password
+        </Text>
+        <TextInput
+          className="min-h-[48px] rounded-lg border border-outline-variant bg-surface-container-lowest px-4 font-body-md text-body-md text-on-surface"
+          value={newPassword}
+          onChangeText={setNewPassword}
+          placeholder="New password"
+          placeholderTextColor={themeColors.outline}
+          secureTextEntry
+        />
+        <TextInput
+          className="min-h-[48px] rounded-lg border border-outline-variant bg-surface-container-lowest px-4 font-body-md text-body-md text-on-surface"
+          value={confirmPassword}
+          onChangeText={setConfirmPassword}
+          placeholder="Confirm new password"
+          placeholderTextColor={themeColors.outline}
+          secureTextEntry
+        />
+        {error ? <Text className="font-label-sm text-label-sm text-error">{error}</Text> : null}
+        <View className="flex-row justify-end gap-2">
+          <Pressable
+            onPress={() => {
+              setEditing(false);
+              setError(null);
+              setNewPassword("");
+              setConfirmPassword("");
+            }}
+            className="rounded-lg px-4 py-2"
+          >
+            <Text className="font-body-md text-body-md text-secondary">Cancel</Text>
+          </Pressable>
+          <Pressable onPress={handleSave} className="rounded-lg bg-primary px-4 py-2">
+            <Text className="font-body-md text-body-md font-semibold text-on-primary">Save</Text>
+          </Pressable>
+        </View>
+      </View>
+    );
+  }
+
+  return (
+    <View className="flex-row items-center justify-between rounded-lg border border-surface-variant bg-surface-container-low p-4">
+      <View>
+        <Text className="mb-1 font-label-sm text-label-sm uppercase tracking-wider text-secondary">
+          Password
+        </Text>
+        <Text className="font-body-md text-body-md text-on-surface">
+          {justSaved ? "Password updated" : "••••••••••••"}
+        </Text>
+      </View>
+      <Pressable
+        onPress={() => setEditing(true)}
+        className="rounded-lg bg-surface-container-highest px-4 py-2"
+      >
+        <Text className="font-body-md text-body-md text-primary">Change</Text>
+      </Pressable>
+    </View>
+  );
+}
 
 export default function DriverSettingsScreen() {
   const router = useRouter();
@@ -63,6 +224,8 @@ export default function DriverSettingsScreen() {
   const [pushEnabled, setPushEnabled] = useState(true);
   const [emailEnabled, setEmailEnabled] = useState(true);
   const [smsEnabled, setSmsEnabled] = useState(false);
+  const [phone, setPhone] = useState("+1 (555) 123-4567");
+  const [email, setEmail] = useState("alex.thompson@example.com");
 
   const handleSignOut = async () => {
     await SecureStore.deleteItemAsync(AUTH_TOKEN_KEY);
@@ -111,50 +274,19 @@ export default function DriverSettingsScreen() {
               </Text>
             </View>
             <View className="mt-6 gap-4">
-              <View className="flex-row items-center justify-between rounded-lg border border-surface-variant bg-surface-container-low p-4">
-                <View>
-                  <Text className="mb-1 font-label-sm text-label-sm uppercase tracking-wider text-secondary">
-                    Phone Number
-                  </Text>
-                  <Text className="font-body-md text-body-md text-on-surface">
-                    +1 (555) 123-4567
-                  </Text>
-                </View>
-                {/* TODO: no backend wiring yet for updating phone number. */}
-                <Pressable className="rounded-lg bg-surface-container-highest px-4 py-2">
-                  <Text className="font-body-md text-body-md text-primary">Update</Text>
-                </Pressable>
-              </View>
-
-              <View className="flex-row items-center justify-between rounded-lg border border-surface-variant bg-surface-container-low p-4">
-                <View>
-                  <Text className="mb-1 font-label-sm text-label-sm uppercase tracking-wider text-secondary">
-                    Email Address
-                  </Text>
-                  <Text className="font-body-md text-body-md text-on-surface">
-                    alex.thompson@example.com
-                  </Text>
-                </View>
-                {/* TODO: no backend wiring yet for updating email address. */}
-                <Pressable className="rounded-lg bg-surface-container-highest px-4 py-2">
-                  <Text className="font-body-md text-body-md text-primary">Update</Text>
-                </Pressable>
-              </View>
-
-              <View className="flex-row items-center justify-between rounded-lg border border-surface-variant bg-surface-container-low p-4">
-                <View>
-                  <Text className="mb-1 font-label-sm text-label-sm uppercase tracking-wider text-secondary">
-                    Password
-                  </Text>
-                  <Text className="font-body-md text-body-md text-on-surface">
-                    ••••••••••••
-                  </Text>
-                </View>
-                {/* TODO: no backend wiring yet for changing password. */}
-                <Pressable className="rounded-lg bg-surface-container-highest px-4 py-2">
-                  <Text className="font-body-md text-body-md text-primary">Change</Text>
-                </Pressable>
-              </View>
+              <EditableField
+                label="Phone Number"
+                value={phone}
+                onSave={setPhone}
+                keyboardType="phone-pad"
+              />
+              <EditableField
+                label="Email Address"
+                value={email}
+                onSave={setEmail}
+                keyboardType="email-address"
+              />
+              <PasswordField />
             </View>
           </View>
 
@@ -177,8 +309,10 @@ export default function DriverSettingsScreen() {
                 <MaterialIcons name="chevron-right" size={20} color={themeColors.secondary} />
               </Pressable>
               <View className="h-[1px] w-full bg-surface-variant" />
-              {/* TODO: no destination specified for Privacy Policy. */}
-              <Pressable className="flex-row items-center justify-between rounded-lg border border-transparent p-4">
+              <Pressable
+                onPress={() => router.push("/(driver)/privacy-policy")}
+                className="flex-row items-center justify-between rounded-lg border border-transparent p-4"
+              >
                 <View className="flex-row items-center gap-3">
                   <MaterialIcons name="privacy-tip" size={20} color={themeColors.secondary} />
                   <Text className="text-on-surface">Privacy Policy</Text>
@@ -186,8 +320,10 @@ export default function DriverSettingsScreen() {
                 <MaterialIcons name="chevron-right" size={20} color={themeColors.secondary} />
               </Pressable>
               <View className="h-[1px] w-full bg-surface-variant" />
-              {/* TODO: no destination specified for Terms of Service. */}
-              <Pressable className="flex-row items-center justify-between rounded-lg border border-transparent p-4">
+              <Pressable
+                onPress={() => router.push("/(driver)/terms-of-service")}
+                className="flex-row items-center justify-between rounded-lg border border-transparent p-4"
+              >
                 <View className="flex-row items-center gap-3">
                   <MaterialIcons name="gavel" size={20} color={themeColors.secondary} />
                   <Text className="text-on-surface">Terms of Service</Text>
@@ -196,16 +332,6 @@ export default function DriverSettingsScreen() {
               </Pressable>
             </View>
           </View>
-
-          <Pressable
-            onPress={handleSignOut}
-            className="mt-4 w-full flex-row items-center justify-center gap-2 rounded-xl bg-error-container px-6 py-4 shadow-sm active:scale-[0.98]"
-          >
-            <MaterialIcons name="logout" size={20} color={themeColors.onErrorContainer} />
-            <Text className="text-[18px] font-headline-lg-mobile leading-6 text-on-error-container">
-              Sign Out
-            </Text>
-          </Pressable>
 
           <View className="gap-stack-sm rounded-xl border border-surface-variant bg-surface-container-lowest p-6 shadow-sm">
             <View className="flex-row items-center gap-2">
@@ -270,6 +396,16 @@ export default function DriverSettingsScreen() {
               </View>
             </View>
           </View>
+
+          <Pressable
+            onPress={handleSignOut}
+            className="mt-4 w-full flex-row items-center justify-center gap-2 rounded-xl bg-error-container px-6 py-4 shadow-sm active:scale-[0.98]"
+          >
+            <MaterialIcons name="logout" size={20} color={themeColors.onErrorContainer} />
+            <Text className="text-[18px] font-headline-lg-mobile leading-6 text-on-error-container">
+              Sign Out
+            </Text>
+          </Pressable>
         </View>
       </ScrollView>
     </View>
