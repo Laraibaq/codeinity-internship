@@ -166,8 +166,10 @@ export default function DriverSettingsScreen() {
               </Text>
             </View>
             <View className="mt-6 gap-2">
-              {/* TODO: no destination specified for Help Center. */}
-              <Pressable className="flex-row items-center justify-between rounded-lg border border-transparent p-4">
+              <Pressable
+                onPress={() => router.push("/(driver)/help-center")}
+                className="flex-row items-center justify-between rounded-lg border border-transparent p-4"
+              >
                 <View className="flex-row items-center gap-3">
                   <MaterialIcons name="help-center" size={20} color={themeColors.secondary} />
                   <Text className="text-on-surface">Help Center</Text>
