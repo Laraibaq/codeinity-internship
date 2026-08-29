@@ -131,6 +131,11 @@ export default function DriverEarningsScreen() {
         className="flex-1"
         contentContainerClassName="mx-auto w-full max-w-4xl gap-gutter px-container-margin pb-32 pt-stack-md"
       >
+        {/* Fixed: this toggle's active-segment className used to be interpolated into a template
+            literal -- the same NativeWind runtime anti-pattern root-caused on login.tsx's
+            phone/email toggle. Both classNames below are now static; the active-dependent
+            background/color/weight moves to a plain `style` prop instead, same fix as
+            @/components/login-method-toggle.tsx's activeSegmentStyle. */}
         <View className="flex-row gap-2 rounded-full bg-surface-container-highest p-1">
           {PERIOD_OPTIONS.map((option) => {
             const active = option.key === period;
@@ -138,12 +143,15 @@ export default function DriverEarningsScreen() {
               <Pressable
                 key={option.key}
                 onPress={() => setPeriod(option.key)}
-                className={`flex-1 items-center rounded-full py-2 ${active ? "bg-primary" : ""}`}
+                className="flex-1 items-center rounded-full py-2"
+                style={active ? { backgroundColor: themeColors.primary } : undefined}
               >
                 <Text
-                  className={`font-label-sm text-label-sm ${
-                    active ? "font-bold text-on-primary" : "text-on-surface-variant"
-                  }`}
+                  className="font-label-sm text-label-sm"
+                  style={{
+                    color: active ? themeColors.onPrimary : themeColors.onSurfaceVariant,
+                    fontWeight: active ? "700" : undefined,
+                  }}
                 >
                   {option.label}
                 </Text>

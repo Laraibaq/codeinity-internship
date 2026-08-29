@@ -67,8 +67,15 @@ export default function EditPersonalInfoScreen() {
               {field.label}
             </Text>
             <View className="relative rounded-lg border border-outline-variant bg-surface-container-lowest">
+              {/* Fixed: className used to interpolate the multiline-dependent position/alignment
+                  into a template literal -- the same NativeWind runtime anti-pattern root-caused on
+                  login.tsx's phone/email toggle. className is now static; the position difference
+                  moves to a plain `style` prop instead. */}
               <View
-                className={`absolute left-0 z-10 pl-4 ${field.multiline ? "top-4" : "inset-y-0 justify-center"}`}
+                className="absolute left-0 z-10 pl-4"
+                style={
+                  field.multiline ? { top: 16 } : { top: 0, bottom: 0, justifyContent: "center" }
+                }
                 pointerEvents="none"
               >
                 <MaterialIcons name={field.icon} size={16} color={themeColors.outline} />

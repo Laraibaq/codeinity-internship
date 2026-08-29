@@ -373,18 +373,21 @@ export default function DriverVerificationStatusScreen() {
               style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}
             />
             <View className="mx-auto w-full max-w-[400px]">
+              {/* Fixed: className used to interpolate `isSubmitting ? "opacity-70" : ""` into a
+                  template literal -- the same NativeWind runtime anti-pattern root-caused on
+                  login.tsx's phone/email toggle. className is now static; the isSubmitting-dependent
+                  opacity is folded into the existing `style` prop instead. */}
               <Pressable
                 onPress={handleSubmitForVerification}
                 disabled={isSubmitting}
-                className={`h-14 w-full flex-row items-center justify-center gap-2 rounded-xl bg-primary active:scale-[0.98] ${
-                  isSubmitting ? "opacity-70" : ""
-                }`}
+                className="h-14 w-full flex-row items-center justify-center gap-2 rounded-xl bg-primary active:scale-[0.98]"
                 style={{
                   shadowColor: themeColors.primary,
                   shadowOffset: { width: 0, height: 4 },
                   shadowOpacity: 0.25,
                   shadowRadius: 12,
                   elevation: 4,
+                  opacity: isSubmitting ? 0.7 : 1,
                 }}
               >
                 {isSubmitting ? (

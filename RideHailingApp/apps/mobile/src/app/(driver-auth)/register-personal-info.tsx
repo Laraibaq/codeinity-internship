@@ -218,19 +218,28 @@ export default function DriverRegisterPersonalInfoScreen() {
                 {genderOptions.map((option) => {
                   const selected = gender === option.value;
                   return (
+                    // Fixed: this row's className used to interpolate the selected state into a
+                    // template literal -- the same NativeWind runtime anti-pattern root-caused on
+                    // login.tsx's phone/email toggle. className is now static; the state-dependent
+                    // colors move to a plain `style` prop instead.
                     <Pressable
                       key={option.value}
                       onPress={() => setGender(option.value)}
-                      className={`min-h-[56px] flex-1 items-center justify-center rounded-lg border p-3 ${
-                        selected
-                          ? "border-primary-container bg-primary-container"
-                          : "border-outline-variant bg-surface-container-lowest"
-                      }`}
+                      className="min-h-[56px] flex-1 items-center justify-center rounded-lg border p-3"
+                      style={{
+                        borderColor: selected
+                          ? themeColors.primaryContainer
+                          : themeColors.outlineVariant,
+                        backgroundColor: selected
+                          ? themeColors.primaryContainer
+                          : themeColors.surfaceContainerLowest,
+                      }}
                     >
                       <Text
-                        className={`text-center font-body-md text-body-md font-medium ${
-                          selected ? "text-on-primary-container" : "text-on-background"
-                        }`}
+                        className="text-center font-body-md text-body-md font-medium"
+                        style={{
+                          color: selected ? themeColors.onPrimaryContainer : themeColors.onBackground,
+                        }}
                       >
                         {option.label}
                       </Text>

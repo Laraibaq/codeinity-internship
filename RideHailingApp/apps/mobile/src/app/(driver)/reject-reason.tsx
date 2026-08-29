@@ -72,6 +72,10 @@ export default function RejectReasonScreen() {
             routing and fare estimates.
           </Text>
 
+          {/* Fixed: this row's className, and the submit button's below, used to interpolate their
+              selected/disabled state into template literals -- the same NativeWind runtime
+              anti-pattern root-caused on login.tsx's phone/email toggle. Both classNames are now
+              static; the state-dependent colors/opacity move to a plain `style` prop instead. */}
           <View className="gap-stack-sm">
             {REASONS.map((reason) => {
               const isSelected = selected === reason.value;
@@ -79,11 +83,13 @@ export default function RejectReasonScreen() {
                 <Pressable
                   key={reason.value}
                   onPress={() => setSelected(reason.value)}
-                  className={`flex-row items-center justify-between rounded-xl border p-4 ${
-                    isSelected
-                      ? "border-primary bg-surface-container-low"
-                      : "border-outline-variant bg-surface-container-lowest"
-                  }`}
+                  className="flex-row items-center justify-between rounded-xl border p-4"
+                  style={{
+                    borderColor: isSelected ? themeColors.primary : themeColors.outlineVariant,
+                    backgroundColor: isSelected
+                      ? themeColors.surfaceContainerLow
+                      : themeColors.surfaceContainerLowest,
+                  }}
                 >
                   <Text className="font-body-md text-body-md font-semibold text-on-surface">
                     {reason.label}
@@ -103,9 +109,8 @@ export default function RejectReasonScreen() {
             onPress={() =>
               router.dismissTo({ pathname: "/(driver)/(tabs)/dashboard", params: { status: "online" } })
             }
-            className={`h-14 w-full items-center justify-center rounded-xl bg-primary shadow-sm active:scale-[0.98] ${
-              selected ? "" : "opacity-50"
-            }`}
+            className="h-14 w-full items-center justify-center rounded-xl bg-primary shadow-sm active:scale-[0.98]"
+            style={selected ? undefined : { opacity: 0.5 }}
           >
             <Text className="font-label-sm text-label-sm text-on-primary">Submit Feedback</Text>
           </Pressable>

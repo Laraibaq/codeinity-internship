@@ -19,6 +19,22 @@ import { themeColors } from "@/constants/theme-colors";
 // has no variable fill weight (unlike Material Symbols) -- every glyph is a single fixed style --
 // so that part of the source's active-state treatment has no equivalent here; the pill background
 // and tint-color swap (already implemented) carry the "active" signal on their own instead.
+// Fixed: className used to interpolate `focused ? "mx-2 rounded-full bg-primary-container" : ""`
+// into a template literal -- the same NativeWind runtime anti-pattern root-caused on login.tsx's
+// phone/email toggle (a conditionally-shaped className triggers a lazy component "upgrade" +
+// remount that crashes native navigation). This component is especially significant: it's plugged
+// directly into React Navigation's own tab-bar rendering via `tabBarButton` (see below), and it's
+// the persistent chrome mounted the entire time any tab screen -- including dashboard.tsx -- is on
+// screen, unlike a screen-local conditional that only affects a subtree the user isn't necessarily
+// interacting with. className is now static; the focused-dependent background/margin/radius moves
+// to a plain `style` prop instead, same fix as @/components/login-method-toggle.tsx's
+// activeSegmentStyle.
+const focusedTabStyle = {
+  marginHorizontal: 8,
+  borderRadius: 9999,
+  backgroundColor: themeColors.primaryContainer,
+};
+
 function TabBarButton({ children, onPress, accessibilityState }: BottomTabBarButtonProps) {
   const focused = accessibilityState?.selected ?? false;
   return (
@@ -28,9 +44,8 @@ function TabBarButton({ children, onPress, accessibilityState }: BottomTabBarBut
     <Pressable
       onPress={onPress}
       accessibilityState={accessibilityState}
-      className={`flex-1 items-center justify-center py-1 active:scale-90 ${
-        focused ? "mx-2 rounded-full bg-primary-container" : ""
-      }`}
+      className="flex-1 items-center justify-center py-1 active:scale-90"
+      style={focused ? focusedTabStyle : undefined}
     >
       {children}
     </Pressable>

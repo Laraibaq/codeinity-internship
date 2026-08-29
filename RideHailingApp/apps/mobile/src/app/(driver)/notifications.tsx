@@ -103,14 +103,20 @@ export default function NotificationsScreen() {
         contentContainerClassName="mx-auto w-full max-w-4xl gap-stack-sm px-container-margin py-stack-md pb-32"
       >
         {notifications.map((notification) => (
+          // Fixed: className used to interpolate the read/unread border+background into a template
+          // literal -- the same NativeWind runtime anti-pattern root-caused on login.tsx's
+          // phone/email toggle. className is now static; the read-dependent colors move to a plain
+          // `style` prop instead.
           <Pressable
             key={notification.id}
             onPress={() => markRead(notification.id)}
-            className={`flex-row items-start gap-3 rounded-xl border p-stack-md shadow-sm active:scale-[0.98] ${
-              notification.read
-                ? "border-outline-variant/30 bg-white"
-                : "border-primary/30 bg-primary-fixed/20"
-            }`}
+            className="flex-row items-start gap-3 rounded-xl border p-stack-md shadow-sm active:scale-[0.98]"
+            style={{
+              borderColor: notification.read
+                ? `${themeColors.outlineVariant}4d`
+                : `${themeColors.primary}4d`,
+              backgroundColor: notification.read ? "#ffffff" : `${themeColors.primaryFixed}33`,
+            }}
           >
             <View className="h-10 w-10 items-center justify-center rounded-full bg-surface-container">
               <MaterialIcons name={notification.icon} size={20} color={themeColors.primary} />

@@ -120,11 +120,22 @@ export default function NearbyRequestsScreen() {
         contentContainerClassName="gap-stack-sm px-container-margin py-stack-md"
       >
         {requests.map((request) => (
+          // Fixed: every conditionally-toggled Tailwind class below (border color, badge
+          // background/text, fare text color, and the Accept button's background/shadow/text) used
+          // to be interpolated into a template-literal className based on `request.accentPrimary` /
+          // `request.badge.tone`. Same NativeWind runtime anti-pattern root-caused on login.tsx's
+          // phone/email toggle (a conditionally-shaped className triggers a lazy component "upgrade"
+          // + remount that crashes native navigation). Every className below is now static; each
+          // state-dependent visual difference moves to a plain `style` prop instead, same fix as
+          // @/components/login-method-toggle.tsx's activeSegmentStyle.
           <View
             key={request.id}
-            className={`overflow-hidden rounded-xl border shadow-sm ${
-              request.accentPrimary ? "border-primary/20" : "border-outline-variant/30"
-            } bg-surface`}
+            className="overflow-hidden rounded-xl border bg-surface shadow-sm"
+            style={{
+              borderColor: request.accentPrimary
+                ? `${themeColors.primary}33`
+                : `${themeColors.outlineVariant}4d`,
+            }}
           >
             {request.accentPrimary ? (
               <View className="absolute left-0 top-0 h-full w-1 bg-primary" />
@@ -134,18 +145,22 @@ export default function NearbyRequestsScreen() {
                 <View className="flex-row items-center gap-2">
                   {request.badge ? (
                     <View
-                      className={`rounded-full px-2 py-0.5 ${
-                        request.badge.tone === "surge"
-                          ? "bg-error-container"
-                          : "bg-surface-container-high"
-                      }`}
+                      className="rounded-full px-2 py-0.5"
+                      style={{
+                        backgroundColor:
+                          request.badge.tone === "surge"
+                            ? themeColors.errorContainer
+                            : themeColors.surfaceContainerHigh,
+                      }}
                     >
                       <Text
-                        className={`font-label-sm text-label-sm ${
-                          request.badge.tone === "surge"
-                            ? "text-on-error-container"
-                            : "text-on-surface"
-                        }`}
+                        className="font-label-sm text-label-sm"
+                        style={{
+                          color:
+                            request.badge.tone === "surge"
+                              ? themeColors.onErrorContainer
+                              : themeColors.onSurface,
+                        }}
                       >
                         {request.badge.label}
                       </Text>
@@ -159,9 +174,8 @@ export default function NearbyRequestsScreen() {
                   </View>
                 </View>
                 <Text
-                  className={`font-fare-display text-fare-display ${
-                    request.accentPrimary ? "text-primary" : "text-on-surface"
-                  }`}
+                  className="font-fare-display text-fare-display"
+                  style={{ color: request.accentPrimary ? themeColors.primary : themeColors.onSurface }}
                 >
                   {formatCurrency(request.fare)}
                 </Text>
@@ -193,16 +207,25 @@ export default function NearbyRequestsScreen() {
               <View className="mt-4 flex-row gap-2 border-t border-outline-variant/20 pt-3">
                 <Pressable
                   onPress={() => router.push("/(driver)/navigate-to-pickup")}
-                  className={`flex-1 items-center justify-center rounded-lg py-3 active:scale-[0.98] ${
+                  className="flex-1 items-center justify-center rounded-lg py-3 active:scale-[0.98]"
+                  style={
                     request.accentPrimary
-                      ? "bg-primary shadow-sm"
-                      : "bg-surface-container-high"
-                  }`}
+                      ? {
+                          backgroundColor: themeColors.primary,
+                          shadowColor: "#000000",
+                          shadowOffset: { width: 0, height: 1 },
+                          shadowOpacity: 0.05,
+                          shadowRadius: 2,
+                          elevation: 1,
+                        }
+                      : { backgroundColor: themeColors.surfaceContainerHigh }
+                  }
                 >
                   <Text
-                    className={`font-label-sm text-label-sm ${
-                      request.accentPrimary ? "text-on-primary" : "text-on-surface"
-                    }`}
+                    className="font-label-sm text-label-sm"
+                    style={{
+                      color: request.accentPrimary ? themeColors.onPrimary : themeColors.onSurface,
+                    }}
                   >
                     Accept
                   </Text>
