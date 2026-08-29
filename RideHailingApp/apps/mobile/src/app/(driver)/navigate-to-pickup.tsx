@@ -1,7 +1,7 @@
 import { useRef } from "react";
 import { Image, Pressable, ScrollView, Text, View, useWindowDimensions } from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { PanGestureHandler, State } from "react-native-gesture-handler";
 import type {
@@ -75,6 +75,22 @@ import { formatCurrency } from "@/utils/currency";
 //
 // "I've Arrived" -> active-ride.tsx, unchanged. Chat and call icon buttons remain inert with their
 // original TODOs (no in-app messaging screen, no telephony wired).
+//
+// Ride data now comes from route params (dashboard.tsx's inline request cards' Accept button passes
+// them -- see that file), same pattern ride-details.tsx already established: only the fields that
+// actually vary per request (name, rating, fare, pickup/dropoff labels) are read from params, each
+// falling back to this screen's own original literal example if missing. ETA/distance and the
+// passenger photo have no equivalent in dashboard.tsx's request-card data model (RideRequest's
+// pickupMeta/dropoffMeta are pre-formatted strings like "2 min (0.8 mi)", not separate time/distance
+// fields), so -- per that same ride-details.tsx precedent -- they keep this screen's own literal
+// values regardless of which request was accepted, rather than guessing at a string-parsing scheme
+// that isn't actually there.
+const DEFAULT_NAME = "Sarah";
+const DEFAULT_RATING = 4.9;
+const DEFAULT_FARE = 24.5;
+const DEFAULT_PICKUP = "Blue Bottle Coffee, 2nd St";
+const DEFAULT_DROPOFF = "Pier 39, Fisherman's Wharf";
+
 const COLLAPSED_HEIGHT = 32;
 const DEFAULT_HEIGHT_RATIO = 0.3;
 const EXPANDED_HEIGHT_RATIO = 0.85;
@@ -84,6 +100,21 @@ export default function NavigateToPickupScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { height: screenHeight } = useWindowDimensions();
+  const params = useLocalSearchParams<{
+    name?: string;
+    rating?: string;
+    fare?: string;
+    pickup?: string;
+    dropoff?: string;
+  }>();
+
+  const name = params.name || DEFAULT_NAME;
+  const parsedRating = Number(params.rating);
+  const rating = Number.isFinite(parsedRating) && parsedRating > 0 ? parsedRating : DEFAULT_RATING;
+  const parsedFare = Number(params.fare);
+  const fare = Number.isFinite(parsedFare) && parsedFare > 0 ? parsedFare : DEFAULT_FARE;
+  const pickupLabel = params.pickup || DEFAULT_PICKUP;
+  const dropoffLabel = params.dropoff || DEFAULT_DROPOFF;
 
   const defaultHeight = screenHeight * DEFAULT_HEIGHT_RATIO;
   const expandedHeight = screenHeight * EXPANDED_HEIGHT_RATIO;
@@ -220,10 +251,10 @@ export default function NavigateToPickupScreen() {
           <View style={{ height: peekZoneHeight }} className="justify-center px-4">
             <View className="flex-row items-center justify-between">
               <Text className="text-xl font-headline-lg-mobile text-headline-lg-mobile text-on-surface">
-                Sarah
+                {name}
               </Text>
               <Text className="font-fare-display text-fare-display text-primary">
-                {formatCurrency(24.5)}
+                {formatCurrency(fare)}
               </Text>
             </View>
           </View>
@@ -247,7 +278,7 @@ export default function NavigateToPickupScreen() {
                     <MaterialIcons name="star" size={14} color={themeColors.primary} />
                   </View>
                 </View>
-                <Text className="font-label-sm text-label-sm text-primary">4.9</Text>
+                <Text className="font-label-sm text-label-sm text-primary">{rating.toFixed(1)}</Text>
               </View>
               <View className="flex-row items-center gap-2">
                 {/* TODO: no in-app messaging screen exists yet. */}
@@ -274,7 +305,7 @@ export default function NavigateToPickupScreen() {
                   className="font-body-md text-body-md font-semibold text-on-surface"
                   numberOfLines={1}
                 >
-                  Blue Bottle Coffee, 2nd St
+                  {pickupLabel}
                 </Text>
               </View>
               <View className="relative">
@@ -288,7 +319,7 @@ export default function NavigateToPickupScreen() {
                   className="font-body-md text-body-md font-semibold text-on-surface"
                   numberOfLines={1}
                 >
-                  Pier 39, Fisherman&apos;s Wharf
+                  {dropoffLabel}
                 </Text>
               </View>
             </View>

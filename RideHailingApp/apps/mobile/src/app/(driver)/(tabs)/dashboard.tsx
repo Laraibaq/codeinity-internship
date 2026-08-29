@@ -252,7 +252,16 @@ export default function DriverDashboardScreen() {
                   request={request}
                   onAccept={() => {
                     clearRequestTimer(request.id);
-                    router.push("/(driver)/navigate-to-pickup");
+                    router.push({
+                      pathname: "/(driver)/navigate-to-pickup",
+                      params: {
+                        name: request.name,
+                        rating: String(request.rating),
+                        fare: String(request.offer),
+                        pickup: request.pickupLabel,
+                        dropoff: request.dropoffLabel,
+                      },
+                    });
                   }}
                   onCounter={() => {
                     clearRequestTimer(request.id);
