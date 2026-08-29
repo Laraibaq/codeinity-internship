@@ -1,3 +1,4 @@
+import { useMemo, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
@@ -6,56 +7,103 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { themeColors } from "@/constants/theme-colors";
 import { formatCurrency } from "@/utils/currency";
 
-// Rule 3 substitutions used on this screen:
-// - Icon-ligature -> MaterialIcons substitution as on every screen in this project; every icon
-//   ("menu", "notifications", "arrow_forward", "payments", "schedule", "check_circle") verified
-//   against the installed glyph map.
-// - The desktop nav drawer (`hidden md:flex`) and the desktop-only "Earnings" header
-//   (`hidden md:block`) are dropped: this is a native phone screen, always below the `md:`
-//   breakpoint, same treatment as every other screen in this project with a mobile/desktop split.
-// - `grid grid-cols-1 md:grid-cols-12` (Balance / Weekly Chart / Summary Stats) resolves to a
-//   single stacked column on mobile -- same substitution used throughout this project for this
-//   grid pattern. The three sections stack in source DOM order: Balance card, Weekly Chart,
-//   Summary Stats.
-// - This screen's own bottom-nav-bar markup from the source is NOT reproduced here -- it's now
-//   provided once, globally, by the shared `(tabs)/_layout.tsx` Tabs navigator (this batch's Part
-//   1), which renders identically across all 4 tab screens instead of being duplicated in each
-//   screen's own JSX.
-// - The Balance card's `-right-20 -top-20 ... bg-primary/5 rounded-full blur-3xl` decoration has no
-//   RN blur-filter equivalent; flattened to a plain low-opacity circle (already barely visible at
-//   5% opacity in the source), same policy as other dropped decorative blurs in this project.
-// - The Friday bar's `$245.50` tooltip only ever appears on `group-hover`, which has no touch
-//   equivalent -- rendered in its resting (hidden) state, same "hover-only reveal renders hidden"
-//   policy used for register-profile-photo.tsx's edit overlay. The bar itself (tallest, primary-
-//   colored) is still shown at its literal height.
-// - Every hardcoded "$" dollar amount ($1,248.50, $245.50, $84.50) uses `formatCurrency` from Part
-//   0 instead of a hardcoded "$" string, per this task's instruction.
-// - `hover:*` / `group-hover:*` / `transition-*` / `duration-*` dropped throughout (no hover state
-//   on touch devices), except where already noted above.
-//
-// - The header's hamburger/menu button -> settings.tsx (push), same as account.tsx's, per explicit
-//   confirmation that this shared header chrome should behave identically across all three screens.
-//
-// One item intentionally left unwired (not guessed):
-// - The notifications bell: no destination specified anywhere in this task.
-// - "Withdraw" is also left inert with a TODO: per this project's cash-only MVP1 policy (see
-//   src/utils/currency.ts), a real payout/withdrawal flow is the same category of "payment method"
-//   concern this task explicitly deferred to MVP3 for account.tsx's "Earnings Settings" -- extending
-//   that same policy here rather than wiring a payout action prematurely.
+type Period = "daily" | "weekly" | "monthly";
 
-const weeklyBars = [
-  { day: "Mon", heightPct: 30, active: false },
-  { day: "Tue", heightPct: 45, active: false },
-  { day: "Wed", heightPct: 60, active: false },
-  { day: "Thu", heightPct: 50, active: false },
-  { day: "Fri", heightPct: 90, active: true },
-  { day: "Sat", heightPct: 20, active: false },
-  { day: "Sun", heightPct: 10, active: false },
+type FinanceBucket = {
+  label: string;
+  earnings: number;
+  expenses: number;
+};
+
+// Mock data until the backend exposes a real earnings/expenses breakdown (Dependencies.docx §5,
+// Rides/RideOffers). "Expenses" here means platform commission + est. fuel cost per ride, not a
+// literal ledger yet. Profit per bucket = earnings - expenses.
+const FINANCE_DATA: Record<Period, FinanceBucket[]> = {
+  daily: [
+    { label: "Mon", earnings: 62, expenses: 18 },
+    { label: "Tue", earnings: 78, expenses: 22 },
+    { label: "Wed", earnings: 95, expenses: 27 },
+    { label: "Thu", earnings: 81, expenses: 24 },
+    { label: "Fri", earnings: 142, expenses: 38 },
+    { label: "Sat", earnings: 54, expenses: 16 },
+    { label: "Sun", earnings: 31, expenses: 10 },
+  ],
+  weekly: [
+    { label: "W1", earnings: 412, expenses: 118 },
+    { label: "W2", earnings: 486, expenses: 137 },
+    { label: "W3", earnings: 398, expenses: 109 },
+    { label: "W4", earnings: 543, expenses: 152 },
+  ],
+  monthly: [
+    { label: "Mar", earnings: 1840, expenses: 512 },
+    { label: "Apr", earnings: 1960, expenses: 548 },
+    { label: "May", earnings: 2110, expenses: 601 },
+    { label: "Jun", earnings: 1780, expenses: 496 },
+    { label: "Jul", earnings: 2340, expenses: 655 },
+    { label: "Aug", earnings: 2205, expenses: 612 },
+  ],
+};
+
+const PERIOD_OPTIONS: { key: Period; label: string }[] = [
+  { key: "daily", label: "Daily" },
+  { key: "weekly", label: "Weekly" },
+  { key: "monthly", label: "Monthly" },
 ];
+
+function FinanceChart({ data }: { data: FinanceBucket[] }) {
+  const buckets = useMemo(
+    () => data.map((bucket) => ({ ...bucket, profit: bucket.earnings - bucket.expenses })),
+    [data],
+  );
+  const maxValue = Math.max(1, ...buckets.map((b) => Math.max(b.profit, b.expenses)));
+
+  return (
+    <View className="gap-stack-sm">
+      <View className="flex-row items-center gap-stack-md">
+        <View className="flex-row items-center gap-2">
+          <View className="h-3 w-3 rounded-full bg-primary" />
+          <Text className="font-label-sm text-label-sm text-on-surface-variant">Profit</Text>
+        </View>
+        <View className="flex-row items-center gap-2">
+          <View className="h-3 w-3 rounded-full bg-rose-400" />
+          <Text className="font-label-sm text-label-sm text-on-surface-variant">Expenses</Text>
+        </View>
+      </View>
+
+      <View className="h-[220px] flex-row items-end justify-between gap-2 border-b border-outline-variant/20 pb-8">
+        {buckets.map((bucket) => (
+          <View key={bucket.label} className="h-full flex-1 items-center justify-end gap-1">
+            <View className="w-full flex-1 flex-row items-end justify-center gap-1">
+              <View
+                className="w-full max-w-[14px] rounded-t-md bg-primary"
+                style={{ height: `${Math.max(4, (bucket.profit / maxValue) * 100)}%` }}
+              />
+              <View
+                className="w-full max-w-[14px] rounded-t-md bg-rose-400"
+                style={{ height: `${Math.max(4, (bucket.expenses / maxValue) * 100)}%` }}
+              />
+            </View>
+            <Text className="mt-1 font-label-sm text-[11px] text-on-surface-variant">
+              {bucket.label}
+            </Text>
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}
 
 export default function DriverEarningsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const [period, setPeriod] = useState<Period>("daily");
+
+  const buckets = FINANCE_DATA[period];
+  const totals = useMemo(() => {
+    const earnings = buckets.reduce((sum, b) => sum + b.earnings, 0);
+    const expenses = buckets.reduce((sum, b) => sum + b.expenses, 0);
+    return { earnings, expenses, profit: earnings - expenses };
+  }, [buckets]);
 
   return (
     <View className="flex-1 bg-background">
@@ -70,7 +118,6 @@ export default function DriverEarningsScreen() {
           <Text className="font-headline-lg-mobile text-headline-lg-mobile font-bold text-primary">
             Driver Portal
           </Text>
-          {/* TODO: no destination specified for the notifications bell. */}
           <Pressable className="items-center justify-center rounded-full p-2 active:scale-95">
             <MaterialIcons name="notifications" size={24} color={themeColors.primary} />
           </Pressable>
@@ -81,32 +128,76 @@ export default function DriverEarningsScreen() {
         className="flex-1"
         contentContainerClassName="mx-auto w-full max-w-4xl gap-gutter px-container-margin pb-32 pt-stack-md"
       >
-        <View className="relative gap-stack-md overflow-hidden rounded-xl border border-outline-variant/30 bg-white p-stack-md shadow-sm">
-          <View
-            className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-primary opacity-5"
-            pointerEvents="none"
-          />
-          <View className="z-10">
-            <Text className="mb-2 font-label-sm text-label-sm uppercase tracking-wider text-on-surface-variant">
-              Available to Withdraw
-            </Text>
-            <Text className="font-display-lg text-display-lg text-on-surface">
-              {formatCurrency(1248.5)}
-            </Text>
-          </View>
-          {/* TODO: payout/withdrawal flow deferred to MVP3 per cash-only policy -- no backend
-              wiring yet (see src/utils/currency.ts header comment). */}
-          <Pressable className="z-10 w-full items-center rounded-full bg-primary px-8 py-3 shadow-sm active:scale-95">
+        <View className="gap-stack-md rounded-xl border border-outline-variant/30 bg-white p-stack-md shadow-sm">
+          <Text className="font-label-sm text-label-sm uppercase tracking-wider text-on-surface-variant">
+            Available to Withdraw
+          </Text>
+          <Text className="font-display-lg text-display-lg text-on-surface">
+            {formatCurrency(1248.5)}
+          </Text>
+          {/* TODO: payout/withdrawal flow deferred to MVP3 per cash-only policy (src/utils/currency.ts). */}
+          <Pressable className="w-full items-center rounded-full bg-primary px-8 py-3 shadow-sm active:scale-95">
             <Text className="font-body-md text-body-md font-semibold text-on-primary">
               Withdraw
             </Text>
           </Pressable>
         </View>
 
-        <View className="h-[400px] gap-stack-md rounded-xl border border-outline-variant/30 bg-white p-stack-md shadow-sm">
+        <View className="flex-row gap-2 rounded-full bg-surface-container-highest p-1">
+          {PERIOD_OPTIONS.map((option) => {
+            const active = option.key === period;
+            return (
+              <Pressable
+                key={option.key}
+                onPress={() => setPeriod(option.key)}
+                className={`flex-1 items-center rounded-full py-2 ${active ? "bg-primary" : ""}`}
+              >
+                <Text
+                  className={`font-label-sm text-label-sm ${
+                    active ? "font-bold text-on-primary" : "text-on-surface-variant"
+                  }`}
+                >
+                  {option.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+
+        <View className="flex-row gap-gutter">
+          <View className="flex-1 gap-2 rounded-xl border border-outline-variant/30 bg-white p-stack-md shadow-sm">
+            <View className="flex-row items-center gap-2">
+              <View className="h-8 w-8 items-center justify-center rounded-full bg-emerald-50">
+                <MaterialIcons name="trending-up" size={16} color="#047857" />
+              </View>
+              <Text className="font-label-sm text-label-sm uppercase tracking-wider text-on-surface-variant">
+                Profit
+              </Text>
+            </View>
+            <Text className="font-fare-display text-fare-display text-on-surface">
+              {formatCurrency(totals.profit)}
+            </Text>
+          </View>
+
+          <View className="flex-1 gap-2 rounded-xl border border-outline-variant/30 bg-white p-stack-md shadow-sm">
+            <View className="flex-row items-center gap-2">
+              <View className="h-8 w-8 items-center justify-center rounded-full bg-rose-50">
+                <MaterialIcons name="trending-down" size={16} color="#be123c" />
+              </View>
+              <Text className="font-label-sm text-label-sm uppercase tracking-wider text-on-surface-variant">
+                Expenses
+              </Text>
+            </View>
+            <Text className="font-fare-display text-fare-display text-on-surface">
+              {formatCurrency(totals.expenses)}
+            </Text>
+          </View>
+        </View>
+
+        <View className="gap-stack-md rounded-xl border border-outline-variant/30 bg-white p-stack-md shadow-sm">
           <View className="flex-row items-center justify-between">
             <Text className="font-headline-lg-mobile text-headline-lg-mobile text-on-surface">
-              Weekly Earnings
+              {PERIOD_OPTIONS.find((o) => o.key === period)?.label} Overview
             </Text>
             {/* TODO: no destination specified for "View Details". */}
             <Pressable className="flex-row items-center gap-1">
@@ -115,64 +206,32 @@ export default function DriverEarningsScreen() {
             </Pressable>
           </View>
 
-          <View className="relative flex-1 flex-row items-end justify-between gap-2 border-b border-outline-variant/20 pb-8 pt-8">
-            {weeklyBars.map((bar) => (
-              <View key={bar.day} className="h-full flex-1 items-center justify-end gap-2 pb-8">
-                <View
-                  className={`w-full max-w-[40px] rounded-t-lg ${
-                    bar.active ? "bg-primary shadow-md" : "bg-surface-container-highest"
-                  }`}
-                  style={{ height: `${bar.heightPct}%` }}
-                />
-                <Text
-                  className={`absolute bottom-0 font-label-sm text-label-sm ${
-                    bar.active ? "font-bold text-primary" : "text-on-surface-variant"
-                  }`}
-                >
-                  {bar.day}
-                </Text>
-              </View>
-            ))}
-          </View>
+          <FinanceChart data={buckets} />
         </View>
 
-        <View className="h-[400px] gap-gutter">
-          <View className="flex-1 justify-center gap-2 rounded-xl border border-outline-variant/30 bg-white p-stack-md shadow-sm">
-            <View className="flex-row items-center gap-2">
-              <View className="h-8 w-8 items-center justify-center rounded-full bg-emerald-50">
-                <MaterialIcons name="payments" size={16} color="#047857" />
-              </View>
-              <Text className="font-label-sm text-label-sm uppercase tracking-wider text-on-surface-variant">
-                Today&apos;s Earnings
-              </Text>
-            </View>
-            <Text className="font-fare-display text-fare-display text-on-surface">
+        <View className="flex-row gap-gutter">
+          <View className="flex-1 items-center gap-1 rounded-xl border border-outline-variant/30 bg-white p-stack-sm shadow-sm">
+            <MaterialIcons name="payments" size={16} color="#1d4ed8" />
+            <Text className="font-fare-display text-[16px] text-on-surface">
               {formatCurrency(84.5)}
             </Text>
+            <Text className="text-center font-label-sm text-[10px] uppercase text-on-surface-variant">
+              Today
+            </Text>
           </View>
-
-          <View className="flex-1 justify-center gap-2 rounded-xl border border-outline-variant/30 bg-white p-stack-md shadow-sm">
-            <View className="flex-row items-center gap-2">
-              <View className="h-8 w-8 items-center justify-center rounded-full bg-blue-50">
-                <MaterialIcons name="schedule" size={16} color="#1d4ed8" />
-              </View>
-              <Text className="font-label-sm text-label-sm uppercase tracking-wider text-on-surface-variant">
-                Online Time
-              </Text>
-            </View>
-            <Text className="font-fare-display text-fare-display text-on-surface">5h 22m</Text>
+          <View className="flex-1 items-center gap-1 rounded-xl border border-outline-variant/30 bg-white p-stack-sm shadow-sm">
+            <MaterialIcons name="schedule" size={16} color="#1d4ed8" />
+            <Text className="font-fare-display text-[16px] text-on-surface">5h 22m</Text>
+            <Text className="text-center font-label-sm text-[10px] uppercase text-on-surface-variant">
+              Online Time
+            </Text>
           </View>
-
-          <View className="flex-1 justify-center gap-2 rounded-xl border border-outline-variant/30 bg-white p-stack-md shadow-sm">
-            <View className="flex-row items-center gap-2">
-              <View className="h-8 w-8 items-center justify-center rounded-full bg-purple-50">
-                <MaterialIcons name="check-circle" size={16} color="#7e22ce" />
-              </View>
-              <Text className="font-label-sm text-label-sm uppercase tracking-wider text-on-surface-variant">
-                Completed Rides
-              </Text>
-            </View>
-            <Text className="font-fare-display text-fare-display text-on-surface">12</Text>
+          <View className="flex-1 items-center gap-1 rounded-xl border border-outline-variant/30 bg-white p-stack-sm shadow-sm">
+            <MaterialIcons name="check-circle" size={16} color="#7e22ce" />
+            <Text className="font-fare-display text-[16px] text-on-surface">12</Text>
+            <Text className="text-center font-label-sm text-[10px] uppercase text-on-surface-variant">
+              Rides
+            </Text>
           </View>
         </View>
       </ScrollView>
