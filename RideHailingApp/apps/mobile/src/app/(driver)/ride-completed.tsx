@@ -47,7 +47,7 @@ export default function RideCompletedScreen() {
 
   const backToDashboard = () =>
     router.dismissTo({
-      pathname: "/(driver)/(tabs)/dashboard",
+      pathname: "/(driver)/(drawer)/(tabs)/dashboard",
       params: { status: "online" },
     });
 

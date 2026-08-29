@@ -113,7 +113,7 @@ export default function RejectReasonScreen() {
             disabled={!selected}
             onPress={() =>
               router.dismissTo({
-                pathname: "/(driver)/(tabs)/dashboard",
+                pathname: "/(driver)/(drawer)/(tabs)/dashboard",
                 params: requestId ? { rejectedRequestId: requestId } : {},
               })
             }
