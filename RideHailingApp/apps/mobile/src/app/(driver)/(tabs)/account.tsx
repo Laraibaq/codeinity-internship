@@ -40,8 +40,9 @@ import { themeColors } from "@/constants/theme-colors";
 //   is step 7 of onboarding and pushes on to register-vehicle-model.tsx next.
 // - Documents -> verification-status.tsx (push, default "review" state), per explicit confirmation.
 // - Ratings & Reviews -> ratings-reviews.tsx (push); new screen, mock data (no backend yet).
-// - Earnings Settings -> left inert with a TODO; per this project's cash-only MVP1 policy, payout-
-//   method configuration is explicitly deferred to MVP3 (see src/utils/currency.ts header comment).
+// - Earnings Settings -> Earnings tab (push). Real payout-method configuration is explicitly
+//   deferred to MVP3 per this project's cash-only policy (see src/utils/currency.ts header
+//   comment), so this redirects to Earnings instead of doing nothing.
 // - Header settings icon -> settings.tsx (push). Icon changed from "menu" to "settings": a
 //   hamburger icon implies a nav drawer this app doesn't have, and it doesn't open one -- it pushes
 //   straight to Settings, so the icon should say that.
@@ -56,19 +57,19 @@ export default function DriverAccountScreen() {
       <View style={{ paddingTop: insets.top }} className="w-full bg-surface shadow-sm">
         <View className="w-full flex-row items-center justify-between px-container-margin py-base">
           <Pressable
-            onPress={() => router.push("/(driver)/settings")}
+            onPress={() => router.push("/(driver)/notifications")}
             className="items-center justify-center rounded-full p-2 active:scale-95"
           >
-            <MaterialIcons name="settings" size={24} color={themeColors.primary} />
+            <MaterialIcons name="notifications" size={24} color={themeColors.primary} />
           </Pressable>
           <Text className="font-headline-lg-mobile text-headline-lg-mobile font-bold text-primary">
             Driver Portal
           </Text>
           <Pressable
-            onPress={() => router.push("/(driver)/notifications")}
+            onPress={() => router.push("/(driver)/settings")}
             className="items-center justify-center rounded-full p-2 active:scale-95"
           >
-            <MaterialIcons name="notifications" size={24} color={themeColors.primary} />
+            <MaterialIcons name="settings" size={24} color={themeColors.primary} />
           </Pressable>
         </View>
       </View>
@@ -203,9 +204,13 @@ export default function DriverAccountScreen() {
             <MaterialIcons name="chevron-right" size={24} color={themeColors.outline} />
           </Pressable>
 
-          {/* TODO: payout-method configuration -- explicitly deferred to MVP3 per the cash-only
-              policy (see src/utils/currency.ts header comment). */}
-          <Pressable className="w-full flex-row items-center justify-between rounded-xl border border-surface-container-highest bg-surface-container-lowest p-4 shadow-sm active:scale-[0.98]">
+          {/* Payout-method configuration itself is explicitly deferred to MVP3 per the cash-only
+              policy (see src/utils/currency.ts header comment) -- this redirects to the Earnings
+              tab instead of doing nothing, until that real settings screen exists. */}
+          <Pressable
+            onPress={() => router.push("/(driver)/(tabs)/earnings")}
+            className="w-full flex-row items-center justify-between rounded-xl border border-surface-container-highest bg-surface-container-lowest p-4 shadow-sm active:scale-[0.98]"
+          >
             <View className="flex-row items-center gap-4">
               <View className="h-12 w-12 items-center justify-center rounded-full bg-surface-container">
                 <MaterialIcons name="payments" size={24} color={themeColors.primary} />

@@ -106,19 +106,19 @@ export default function DriverHistoryScreen() {
       <View style={{ paddingTop: insets.top }} className="w-full bg-surface shadow-sm">
         <View className="h-16 w-full flex-row items-center justify-between px-container-margin py-base">
           <Pressable
-            onPress={() => router.push("/(driver)/settings")}
+            onPress={() => router.push("/(driver)/notifications")}
             className="-ml-2 items-center justify-center rounded-full p-2 active:scale-95"
           >
-            <MaterialIcons name="settings" size={24} color={themeColors.primary} />
+            <MaterialIcons name="notifications" size={24} color={themeColors.primary} />
           </Pressable>
           <Text className="flex-1 text-center font-headline-lg-mobile text-headline-lg-mobile font-bold text-primary">
             History
           </Text>
           <Pressable
-            onPress={() => router.push("/(driver)/notifications")}
+            onPress={() => router.push("/(driver)/settings")}
             className="-mr-2 items-center justify-center rounded-full p-2 active:scale-95"
           >
-            <MaterialIcons name="notifications" size={24} color={themeColors.primary} />
+            <MaterialIcons name="settings" size={24} color={themeColors.primary} />
           </Pressable>
         </View>
       </View>
