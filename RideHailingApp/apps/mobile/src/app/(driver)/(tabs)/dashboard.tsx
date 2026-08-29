@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Image, LayoutAnimation, Pressable, Text, View } from "react-native";
+import { Image, LayoutAnimation, Pressable, ScrollView, Text, View } from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { BlurView } from "expo-blur";
@@ -118,10 +118,16 @@ const SAMPLE_REQUESTS: Omit<RideRequest, "id">[] = [
 // Fixed (Part 1): incoming requests used to open ride-request-notification.tsx as a
 // transparentModal, with a further push to ride-request-detail.tsx on tapping the card. Both screens
 // have been deleted entirely -- their content (passenger, rating, offer, pickup/dropoff, Accept/
-// Counter/Reject) now renders as `RideRequestCard`s directly on this screen, in a wrapping row
-// directly below the ONLINE/Go Offline bar. Tapping a card does nothing, per explicit instruction;
-// only its three buttons act. Multiple requests can be visible at once (the row wraps), which is the
-// reason `requests` is an array instead of the old single-request-at-a-time modal.
+// Counter/Reject) now renders as `RideRequestCard`s directly on this screen, directly below the
+// ONLINE/Go Offline bar. Tapping a card does nothing, per explicit instruction; only its three
+// buttons act. Multiple requests can be visible at once, which is the reason `requests` is an array
+// instead of the old single-request-at-a-time modal.
+//
+// Fixed: the cards used to render as a small wrap/shrink row (two ~48%-width boxes per row). Per
+// explicit instruction they're now a full-width vertical list instead, one below another inside a
+// ScrollView -- matching the row style the now-deleted nearby-requests.tsx screen used (full-width
+// card, spacious padding, timeline against the left border) -- so the list scrolls instead of
+// wrapping once more requests arrive than fit on screen.
 export default function DriverDashboardScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -194,24 +200,26 @@ export default function DriverDashboardScreen() {
           </View>
 
           {requests.length > 0 ? (
-            <View className="mt-3 flex-1 px-container-margin">
-              <View className="flex-row flex-wrap gap-2">
-                {requests.map((request) => (
-                  <RideRequestCard
-                    key={request.id}
-                    request={request}
-                    onAccept={() => router.push("/(driver)/navigate-to-pickup")}
-                    onCounter={() => router.push("/(driver)/counter-offer")}
-                    onReject={() =>
-                      router.push({
-                        pathname: "/(driver)/reject-reason",
-                        params: { requestId: request.id },
-                      })
-                    }
-                  />
-                ))}
-              </View>
-            </View>
+            <ScrollView
+              className="mt-3 flex-1"
+              contentContainerClassName="gap-3 px-container-margin pb-4"
+              showsVerticalScrollIndicator={false}
+            >
+              {requests.map((request) => (
+                <RideRequestCard
+                  key={request.id}
+                  request={request}
+                  onAccept={() => router.push("/(driver)/navigate-to-pickup")}
+                  onCounter={() => router.push("/(driver)/counter-offer")}
+                  onReject={() =>
+                    router.push({
+                      pathname: "/(driver)/reject-reason",
+                      params: { requestId: request.id },
+                    })
+                  }
+                />
+              ))}
+            </ScrollView>
           ) : onlineView === "searching" ? (
             <View className="flex-1 items-center justify-center px-container-margin">
               <View className="w-full max-w-sm items-center gap-2 rounded-2xl border border-outline-variant/30 bg-surface/90 px-6 py-4 shadow-lg">
