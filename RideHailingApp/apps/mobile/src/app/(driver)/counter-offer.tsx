@@ -142,12 +142,17 @@ export default function CounterOfferScreen() {
               </View>
             </View>
 
+            {/* Fixed: className used to interpolate `isSending ? "opacity-70" : ""` into a template
+                literal -- the same NativeWind runtime anti-pattern root-caused on login.tsx's
+                phone/email toggle (a conditionally-shaped className triggers a lazy component
+                "upgrade" + remount that crashes native navigation). className is now static; the
+                isSending-dependent opacity moves to a plain `style` prop instead, same fix as
+                @/components/login-method-toggle.tsx's activeSegmentStyle. */}
             <Pressable
               onPress={handleSendCounterOffer}
               disabled={isSending}
-              className={`mt-auto h-14 w-full flex-row items-center justify-center gap-2 rounded-xl bg-primary shadow-lg active:scale-[0.98] ${
-                isSending ? "opacity-70" : ""
-              }`}
+              className="mt-auto h-14 w-full flex-row items-center justify-center gap-2 rounded-xl bg-primary shadow-lg active:scale-[0.98]"
+              style={isSending ? { opacity: 0.7 } : undefined}
             >
               {isSending ? (
                 <>
