@@ -6,6 +6,13 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { SelectModal } from "@/components/select-modal";
 import { themeColors } from "@/constants/theme-colors";
+import { registrationDraft, type DraftVehicleType } from "@/utils/registration-draft";
+
+const MODEL_PLACEHOLDER: Record<DraftVehicleType, string> = {
+  car: "e.g. Toyota Camry",
+  bike: "e.g. Honda CG 125",
+  rickshaw: "e.g. Vespa APE",
+};
 
 const CURRENT_YEAR = new Date().getFullYear();
 const YEAR_OPTIONS = Array.from({ length: CURRENT_YEAR - 1990 + 1 }, (_, i) =>
@@ -133,7 +140,7 @@ export default function DriverRegisterVehicleModelScreen() {
           </Text>
           <TextInput
             className="h-14 w-full rounded-lg border border-outline-variant bg-surface-container-lowest px-4 text-on-surface shadow-sm focus:border-primary"
-            placeholder="e.g. Toyota Camry"
+            placeholder={MODEL_PLACEHOLDER[registrationDraft.vehicleType]}
             placeholderTextColor={themeColors.outline}
           />
         </View>

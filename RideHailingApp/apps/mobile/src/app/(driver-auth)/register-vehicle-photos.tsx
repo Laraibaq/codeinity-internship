@@ -4,6 +4,7 @@ import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { themeColors } from "@/constants/theme-colors";
+import { registrationDraft, type DraftVehicleType } from "@/utils/registration-draft";
 
 // Recreated screen: an earlier "Vehicle Photo Upload" screen existed at this same path, but was
 // deleted along with two other files from an alternate registration flow that was abandoned in favor
@@ -35,13 +36,45 @@ import { themeColors } from "@/constants/theme-colors";
 // Placed as the new last screen of the vehicle section: register-vehicle-color.tsx's "Confirm
 // Selection" now pushes here instead of going straight to (driver)/verification-status. "Submit
 // Photos" continues the flow to (driver)/verification-status.
+//
+// Per-vehicle-type photo requirements (added once Bike and Rickshaw were unlocked on
+// register-vehicle-type.tsx): this screen used to hardcode 4 car-specific slots, including an
+// "Interior" photo and copy that said "your car" -- meaningless/wrong for a two-wheeler. Reads
+// `registrationDraft.vehicleType` (written by register-vehicle-type.tsx's Continue button) and
+// picks the matching slot set + intro copy below instead. Cars keep their original 4 slots
+// unchanged; bikes swap "Interior" for a "License Plate" close-up (bikes have no cabin, but the
+// plate is easy to miss in a full-bike shot); rickshaws keep "Interior" as "Cabin" (theirs is a
+// real passenger compartment, worth its own photo).
 
-const photoSlots: { key: string; label: string; icon: keyof typeof MaterialIcons.glyphMap }[] = [
-  { key: "front", label: "Exterior Front", icon: "directions-car" },
-  { key: "side", label: "Exterior Side", icon: "directions-car" },
-  { key: "back", label: "Exterior Back", icon: "directions-car" },
-  { key: "interior", label: "Interior", icon: "event-seat" },
-];
+const PHOTO_SLOTS_BY_TYPE: Record<
+  DraftVehicleType,
+  { key: string; label: string; icon: keyof typeof MaterialIcons.glyphMap }[]
+> = {
+  car: [
+    { key: "front", label: "Exterior Front", icon: "directions-car" },
+    { key: "side", label: "Exterior Side", icon: "directions-car" },
+    { key: "back", label: "Exterior Back", icon: "directions-car" },
+    { key: "interior", label: "Interior", icon: "event-seat" },
+  ],
+  bike: [
+    { key: "front", label: "Front View", icon: "two-wheeler" },
+    { key: "side", label: "Side View", icon: "two-wheeler" },
+    { key: "back", label: "Rear View", icon: "two-wheeler" },
+    { key: "plate", label: "License Plate", icon: "pin" },
+  ],
+  rickshaw: [
+    { key: "front", label: "Exterior Front", icon: "airport-shuttle" },
+    { key: "side", label: "Exterior Side", icon: "airport-shuttle" },
+    { key: "back", label: "Exterior Back", icon: "airport-shuttle" },
+    { key: "interior", label: "Cabin", icon: "event-seat" },
+  ],
+};
+
+const VEHICLE_LABEL: Record<DraftVehicleType, string> = {
+  car: "car",
+  bike: "bike",
+  rickshaw: "rickshaw",
+};
 
 function PhotoUploadCard({
   slot,
@@ -72,6 +105,8 @@ function PhotoUploadCard({
 export default function DriverRegisterVehiclePhotosScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const vehicleType = registrationDraft.vehicleType;
+  const photoSlots = PHOTO_SLOTS_BY_TYPE[vehicleType];
 
   return (
     <View className="flex-1 bg-background">
@@ -109,8 +144,8 @@ export default function DriverRegisterVehiclePhotosScreen() {
             Upload Vehicle Photos
           </Text>
           <Text className="font-body-md text-body-md text-on-surface-variant">
-            Provide clear photos of your vehicle from each angle below. This helps riders recognize
-            your car and confirms it matches your registration.
+            Provide clear photos of your {VEHICLE_LABEL[vehicleType]} from each angle below. This
+            helps riders recognize it and confirms it matches your registration.
           </Text>
         </View>
 

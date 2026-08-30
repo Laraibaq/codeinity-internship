@@ -5,6 +5,7 @@ import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { themeColors } from "@/constants/theme-colors";
+import { registrationDraft } from "@/utils/registration-draft";
 
 // NEW SCREEN -- no source HTML, designed per your brief to match Select Vehicle Model's visual
 // style: same TopAppBar (back arrow + centered "Driver Registration" title + spacer), same
@@ -23,35 +24,36 @@ import { themeColors } from "@/constants/theme-colors";
 // fixed as a step-numbering bug; Y went from 9 to 10 once register-vehicle-photos.tsx was added as
 // the new last screen. See register-identity-document.tsx's header comment for the full new order.
 //
-// Vehicle-type options reflect the Vehicle entity's type enum from Dependencies.docx SS5. Per that
-// same doc, MVP1 only supports Car, so Bike and Rickshaw render as visibly disabled cards with a
-// "Coming Soon" pill (reusing the "Pending" pill's visual language from register-license-upload.tsx
-// for consistency), non-Pressable and inert.
+// Vehicle-type options reflect the Vehicle entity's type enum from Dependencies.docx SS5. Bike and
+// Rickshaw are unlocked, per explicit request -- all three are real, selectable options now, no
+// "Coming Soon" pill. The one screen further down the flow that actually differed by vehicle type
+// (register-vehicle-photos.tsx, which asked for an "Interior" car photo and said "your car" in its
+// copy) now reads the choice made here via `registrationDraft.vehicleType` and asks for the right
+// set of photos for whichever type was picked.
 //
-// Design call you asked me to flag: Car is auto-selected by default (there's no real choice to
-// make when it's the only supported option), shown via a filled check-circle trailing indicator --
-// not "tap required to select," since forcing a tap on the one enabled option added friction without
-// adding information. The Continue button is always enabled since Car is always the active
-// selection; it's a bare Pressable (rule 5 -- no real form-state validation), not literally
-// implementing a required-selection guard.
+// Selection is a real tap-to-choose now (previously Car was hardcoded as the permanent selection
+// since it was the only enabled option) -- Continue is disabled until one is picked, and writes the
+// choice to `registrationDraft` before navigating on, same module-level-draft pattern register.tsx
+// already uses for the phone number.
 
 type VehicleType = "car" | "bike" | "rickshaw";
 
-const vehicleTypeOptions: {
-  value: VehicleType;
-  title: string;
-  subtitle: string;
-  disabled: boolean;
-}[] = [
-  { value: "car", title: "Car", subtitle: "Sedan, hatchback, or SUV", disabled: false },
-  { value: "bike", title: "Bike", subtitle: "Two-wheeler", disabled: true },
-  { value: "rickshaw", title: "Rickshaw", subtitle: "Auto-rickshaw", disabled: true },
+const vehicleTypeOptions: { value: VehicleType; title: string; subtitle: string }[] = [
+  { value: "car", title: "Car", subtitle: "Sedan, hatchback, or SUV" },
+  { value: "bike", title: "Bike", subtitle: "Two-wheeler" },
+  { value: "rickshaw", title: "Rickshaw", subtitle: "Auto-rickshaw" },
 ];
 
 export default function DriverRegisterVehicleTypeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const [vehicleType, setVehicleType] = useState<VehicleType>("car");
+  const [vehicleType, setVehicleType] = useState<VehicleType | null>(null);
+
+  const handleContinue = () => {
+    if (!vehicleType) return;
+    registrationDraft.vehicleType = vehicleType;
+    router.push("/(driver-auth)/register-vehicle-model");
+  };
 
   return (
     <View className="h-full w-full flex-1 bg-background">
@@ -105,21 +107,14 @@ export default function DriverRegisterVehicleTypeScreen() {
           {vehicleTypeOptions.map((option) => {
             const selected = vehicleType === option.value;
             return (
-              // Fixed: className used to interpolate a three-way disabled/selected conditional into
-              // a template literal -- the same NativeWind runtime anti-pattern root-caused on
-              // login.tsx's phone/email toggle. className is now static (bg-surface-container-lowest
-              // was already common to all three branches); the border-color and opacity differences
-              // move to a plain `style` prop instead.
+              // className is static, not interpolated into a template literal (the selected/
+              // unselected difference moves to `style` instead) -- the same NativeWind runtime
+              // anti-pattern root-caused on login.tsx's phone/email toggle.
               <Pressable
                 key={option.value}
-                disabled={option.disabled}
                 onPress={() => setVehicleType(option.value)}
                 className="w-full rounded-xl border bg-surface-container-lowest p-4 shadow-sm"
-                style={{
-                  borderColor:
-                    !option.disabled && selected ? themeColors.primary : themeColors.outlineVariant,
-                  opacity: option.disabled ? 0.5 : 1,
-                }}
+                style={{ borderColor: selected ? themeColors.primary : themeColors.outlineVariant }}
               >
                 <View className="flex-row items-center justify-between">
                   <View>
@@ -130,13 +125,7 @@ export default function DriverRegisterVehicleTypeScreen() {
                       {option.subtitle}
                     </Text>
                   </View>
-                  {option.disabled ? (
-                    <View className="rounded-full bg-surface-container-high px-3 py-1">
-                      <Text className="font-label-sm text-label-sm text-on-surface-variant">
-                        Coming Soon
-                      </Text>
-                    </View>
-                  ) : selected ? (
+                  {selected ? (
                     <MaterialIcons name="check-circle" size={24} color={themeColors.primary} />
                   ) : (
                     <MaterialIcons
@@ -153,8 +142,10 @@ export default function DriverRegisterVehicleTypeScreen() {
 
         <View className="mt-auto pb-stack-lg pt-stack-md">
           <Pressable
-            onPress={() => router.push("/(driver-auth)/register-vehicle-model")}
+            disabled={!vehicleType}
+            onPress={handleContinue}
             className="h-14 w-full items-center justify-center rounded-xl bg-primary shadow-md active:scale-95"
+            style={vehicleType ? undefined : { opacity: 0.5 }}
           >
             <Text className="font-body-md text-body-md font-semibold text-on-primary">
               Continue
