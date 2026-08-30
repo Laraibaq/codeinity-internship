@@ -145,16 +145,15 @@ export default function NavigateToPickupScreen() {
               </View>
               <Text className="font-label-sm text-label-sm text-primary">{rating.toFixed(1)}</Text>
             </View>
-            <View className="flex-row items-center gap-2">
-              {/* TODO: no in-app messaging screen exists yet. */}
-              <Pressable className="h-10 w-10 items-center justify-center rounded-full border border-outline-variant/30 bg-surface shadow-sm active:scale-95">
-                <MaterialIcons name="chat" size={20} color={themeColors.onSurface} />
-              </Pressable>
-              {/* TODO: no telephony wired. */}
-              <Pressable className="h-10 w-10 items-center justify-center rounded-full border border-outline-variant/30 bg-surface shadow-sm active:scale-95">
-                <MaterialIcons name="call" size={20} color={themeColors.onSurface} />
-              </Pressable>
-            </View>
+            {/* Chat -> chat.tsx (push). Call moved into that screen's own header instead of
+                living here as a separate icon, per explicit request -- messaging and calling the
+                passenger are the same category of action, so they share one entry point. */}
+            <Pressable
+              onPress={() => router.push({ pathname: "/(driver)/chat", params: { name } })}
+              className="h-10 w-10 items-center justify-center rounded-full border border-outline-variant/30 bg-surface shadow-sm active:scale-95"
+            >
+              <MaterialIcons name="chat" size={20} color={themeColors.onSurface} />
+            </Pressable>
           </View>
 
           <View className="relative flex-col gap-stack-md rounded-2xl border border-outline-variant/20 bg-surface-container-low py-3 pl-10 pr-2">

@@ -80,18 +80,17 @@ export default function DriverRegisterScreen() {
     <View className="h-full flex-1 bg-surface">
       <View style={{ paddingTop: insets.top }} className="bg-surface">
         <View className="h-16 w-full flex-row items-center justify-between px-container-margin">
-          <View className="flex-row items-center gap-4">
-            <Pressable
-              onPress={() => router.back()}
-              accessibilityLabel="Go back"
-              className="h-10 w-10 items-center justify-center rounded-full active:scale-95"
-            >
-              <MaterialIcons name="arrow-back" size={16} color={themeColors.onSurfaceVariant} />
-            </Pressable>
-            <Text className="font-headline-lg-mobile text-headline-lg-mobile font-bold tracking-tight text-primary">
-              Driver Registration
-            </Text>
-          </View>
+          <Pressable
+            onPress={() => router.back()}
+            accessibilityLabel="Go back"
+            className="h-10 w-10 items-center justify-center rounded-full active:scale-95"
+          >
+            <MaterialIcons name="arrow-back" size={16} color={themeColors.onSurfaceVariant} />
+          </Pressable>
+          <Text className="font-headline-lg-mobile text-headline-lg-mobile font-bold tracking-tight text-primary">
+            Driver Registration
+          </Text>
+          <View className="w-10" />
         </View>
       </View>
 
@@ -241,10 +240,17 @@ export default function DriverRegisterScreen() {
 
         <Text className="mt-8 px-4 text-center font-label-sm text-label-sm text-outline">
           By signing up, you agree to Indigo Motion&apos;s{" "}
-          {/* TODO: no Terms of Service screen/content exists yet; inert until one does. */}
-          <Text className="underline">Terms of Service</Text> and{" "}
-          {/* TODO: no Privacy Policy screen/content exists yet; inert until one does. */}
-          <Text className="underline">Privacy Policy</Text>.
+          <Text
+            onPress={() => router.push("/(driver)/terms-of-service")}
+            className="underline"
+          >
+            Terms of Service
+          </Text>{" "}
+          and{" "}
+          <Text onPress={() => router.push("/(driver)/privacy-policy")} className="underline">
+            Privacy Policy
+          </Text>
+          .
         </Text>
       </ScrollView>
     </View>

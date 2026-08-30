@@ -1,4 +1,4 @@
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { Linking, Pressable, ScrollView, Text, View } from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -49,8 +49,10 @@ export default function DriverSafetyCenterScreen() {
           <Text className="font-headline-lg-mobile text-headline-lg-mobile font-bold text-primary">
             Safety Center
           </Text>
-          {/* TODO: no destination specified for the notifications bell. */}
-          <Pressable className="items-center justify-center rounded-full p-2 active:scale-95">
+          <Pressable
+            onPress={() => router.push("/(driver)/(drawer)/notifications")}
+            className="items-center justify-center rounded-full p-2 active:scale-95"
+          >
             <MaterialIcons name="notifications" size={24} color={themeColors.onSurfaceVariant} />
           </Pressable>
         </View>
@@ -76,21 +78,19 @@ export default function DriverSafetyCenterScreen() {
             </Text>
           </View>
 
-          {/* TODO: real slide-gesture + telephony (call 911) wiring needed; static placeholder for
-              now, per explicit instruction. */}
-          <View className="h-16 w-full max-w-sm flex-row items-center rounded-full border border-error/10 bg-surface-container-lowest p-2">
-            <View className="absolute left-2 h-12 w-12 items-center justify-center rounded-full bg-error shadow-md">
-              <MaterialIcons name="arrow-forward" size={24} color={themeColors.onError} />
-            </View>
-            <View className="flex-1 items-center" pointerEvents="none">
-              <Text
-                className="pl-10 font-label-sm text-label-sm uppercase tracking-widest text-error"
-                style={{ opacity: 0.6 }}
-              >
-                Slide to Call 911
-              </Text>
-            </View>
-          </View>
+          {/* Fixed: was a static "slide to call" placeholder with no real gesture or telephony
+              wired -- now a real button. Uses `Linking.openURL("tel:911")` to open the device's
+              own phone dialer, the same no-backend-needed pattern as Emergency Contacts' Call
+              buttons and help-center.tsx's Email Support. */}
+          <Pressable
+            onPress={() => Linking.openURL("tel:911")}
+            className="h-16 w-full max-w-sm flex-row items-center justify-center gap-3 rounded-full bg-error shadow-md active:scale-[0.98]"
+          >
+            <MaterialIcons name="call" size={22} color={themeColors.onError} />
+            <Text className="font-label-sm text-label-sm uppercase tracking-widest text-on-error">
+              Call 911
+            </Text>
+          </Pressable>
         </View>
 
         <Text className="px-2 pt-4 font-label-sm text-label-sm uppercase tracking-widest text-on-surface-variant">
@@ -98,8 +98,10 @@ export default function DriverSafetyCenterScreen() {
         </Text>
 
         <View className="gap-gutter">
-          {/* TODO: no screen built yet for Emergency Contacts. */}
-          <Pressable className="gap-4 rounded-xl border border-outline-variant/30 bg-surface-container-lowest p-6 shadow-sm">
+          <Pressable
+            onPress={() => router.push("/(driver)/emergency-contacts")}
+            className="gap-4 rounded-xl border border-outline-variant/30 bg-surface-container-lowest p-6 shadow-sm active:scale-[0.98]"
+          >
             <View className="h-12 w-12 items-center justify-center rounded-full bg-primary-container">
               <MaterialIcons name="contacts" size={24} color={themeColors.primary} />
             </View>
@@ -113,8 +115,10 @@ export default function DriverSafetyCenterScreen() {
             </View>
           </Pressable>
 
-          {/* TODO: no screen built yet for Share Trip Status. */}
-          <Pressable className="gap-4 rounded-xl border border-outline-variant/30 bg-surface-container-lowest p-6 shadow-sm">
+          <Pressable
+            onPress={() => router.push("/(driver)/share-trip-status")}
+            className="gap-4 rounded-xl border border-outline-variant/30 bg-surface-container-lowest p-6 shadow-sm active:scale-[0.98]"
+          >
             <View className="h-12 w-12 items-center justify-center rounded-full bg-surface-variant">
               <MaterialIcons name="share-location" size={24} color={themeColors.onSurfaceVariant} />
             </View>
@@ -128,8 +132,10 @@ export default function DriverSafetyCenterScreen() {
             </View>
           </Pressable>
 
-          {/* TODO: no screen built yet for Report a Passenger. */}
-          <Pressable className="gap-4 rounded-xl border border-outline-variant/30 bg-surface-container-lowest p-6 shadow-sm">
+          <Pressable
+            onPress={() => router.push("/(driver)/report-passenger")}
+            className="gap-4 rounded-xl border border-outline-variant/30 bg-surface-container-lowest p-6 shadow-sm active:scale-[0.98]"
+          >
             <View className="h-12 w-12 items-center justify-center rounded-full bg-surface-variant">
               <MaterialIcons name="person-off" size={24} color={themeColors.onSurfaceVariant} />
             </View>
@@ -143,8 +149,10 @@ export default function DriverSafetyCenterScreen() {
             </View>
           </Pressable>
 
-          {/* TODO: no screen built yet for Safety Tips. */}
-          <Pressable className="gap-4 rounded-xl border border-outline-variant/30 bg-surface-container-lowest p-6 shadow-sm">
+          <Pressable
+            onPress={() => router.push("/(driver)/safety-tips")}
+            className="gap-4 rounded-xl border border-outline-variant/30 bg-surface-container-lowest p-6 shadow-sm active:scale-[0.98]"
+          >
             <View className="h-12 w-12 items-center justify-center rounded-full bg-surface-variant">
               <MaterialIcons name="lightbulb" size={24} color={themeColors.onSurfaceVariant} />
             </View>

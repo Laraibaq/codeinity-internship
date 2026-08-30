@@ -54,8 +54,17 @@ export default function ActiveRideScreen() {
         style={{ paddingTop: insets.top }}
         className="absolute left-0 top-0 z-50 w-full flex-row items-center justify-between px-container-margin py-base"
       >
-        {/* TODO: no destination specified for this menu icon; see header note above. */}
-        <Pressable className="h-10 w-10 items-center justify-center rounded-full bg-surface shadow-md active:scale-95">
+        {/* This screen sits outside the Dashboard/Earnings/Account drawer entirely (a focused
+            mid-ride flow, not part of that navigator's tree), so this icon can't literally open
+            that sidebar from here -- there's no ancestor path for the action to bubble to. Wired
+            to return to the Dashboard instead (same real-world intent as "menu": step out of this
+            focused screen back to the main app shell), rather than leaving it dead. */}
+        <Pressable
+          onPress={() =>
+            router.dismissTo({ pathname: "/(driver)/(drawer)/(tabs)/dashboard", params: { status: "online" } })
+          }
+          className="h-10 w-10 items-center justify-center rounded-full bg-surface shadow-md active:scale-95"
+        >
           <MaterialIcons name="menu" size={24} color={themeColors.onSurface} />
         </Pressable>
         <View className="flex-row items-center gap-2 rounded-full bg-surface px-4 py-2 shadow-md">
@@ -173,21 +182,19 @@ export default function ActiveRideScreen() {
           </View>
 
           <View className="bg-surface-bright px-container-margin py-stack-md">
-            {/* TODO: static tap-target standing in for a real swipe gesture -- see file header
-                comment. Also see file header comment: tapping this skips a "trip in progress"
-                state that doesn't exist yet as a screen; this is a demo/testing shortcut only. */}
+            {/* Fixed, per explicit request: was a fake "swipe" control (a static tap-target
+                standing in for a real drag gesture that was never built) -- now a real button,
+                same as every other primary action in this app. Tapping this still skips a "trip in
+                progress" state that doesn't exist yet as a screen; that shortcut is unchanged, only
+                the swipe pretense is gone. */}
             <Pressable
               onPress={() => router.push("/(driver)/ride-completed")}
-              className="relative h-14 w-full flex-row items-center overflow-hidden rounded-full bg-surface-container-highest active:opacity-90"
+              className="h-14 w-full flex-row items-center justify-center gap-2 rounded-full bg-primary shadow-md active:scale-[0.98]"
             >
-              <View className="absolute inset-0 z-10 items-center justify-center" pointerEvents="none">
-                <Text className="font-label-sm text-[14px] uppercase tracking-widest text-on-surface-variant">
-                  Swipe to Start Ride
-                </Text>
-              </View>
-              <View className="absolute left-1 h-12 w-12 items-center justify-center rounded-full bg-primary shadow-md">
-                <MaterialIcons name="chevron-right" size={24} color={themeColors.onPrimary} />
-              </View>
+              <MaterialIcons name="play-arrow" size={22} color={themeColors.onPrimary} />
+              <Text className="font-label-sm text-[14px] uppercase tracking-widest text-on-primary">
+                Start Ride
+              </Text>
             </Pressable>
             <Text className="mt-3 text-center font-body-md text-[13px] text-on-surface-variant">
               Passenger has been notified of your arrival.
