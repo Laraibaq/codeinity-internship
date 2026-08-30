@@ -1,13 +1,15 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Image, LayoutAnimation, Pressable, ScrollView, Text, View } from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import { BlurView } from "expo-blur";
+import { DrawerActions, useFocusEffect } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { themeColors } from "@/constants/theme-colors";
 import { formatCurrency } from "@/utils/currency";
 import { RideRequestCard, type RideRequest } from "@/components/ride-request-card";
+import { consumeDrawerOpenRequest } from "@/utils/drawer-open-request";
 
 type DriverStatus = "online" | "offline";
 type OnlineView = "searching" | "no-requests";
@@ -147,6 +149,7 @@ const REQUEST_EXPIRY_MS = 15000;
 
 export default function DriverDashboardScreen() {
   const router = useRouter();
+  const navigation = useNavigation();
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ status?: string }>();
   const [status, setStatus] = useState<DriverStatus>("offline");
@@ -154,6 +157,18 @@ export default function DriverDashboardScreen() {
   const [requests, setRequests] = useState<RideRequest[]>([]);
   const nextSampleIndex = useRef(0);
   const requestTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+
+  // Consumes a drawer-open request left by a screen outside the Drawer's own tree (currently only
+  // active-ride.tsx's menu icon -- see drawer-open-request.ts for why that screen can't dispatch
+  // DrawerActions.openDrawer() directly). This screen is the one every such request returns to, and
+  // it IS nested inside the Drawer/Tabs tree, so the dispatch below reaches it correctly.
+  useFocusEffect(
+    useCallback(() => {
+      if (consumeDrawerOpenRequest()) {
+        navigation.dispatch(DrawerActions.openDrawer());
+      }
+    }, [navigation]),
+  );
 
   // Fixed: the online<->offline swap (and the nested searching<->no-requests swap below) used to
   // be an instant hard content-swap with zero feedback. Both now cross-fade via

@@ -96,22 +96,26 @@ export default function DriverRegisterScreen() {
 
       <ScrollView
         className="w-full flex-1"
-        contentContainerClassName="mx-auto w-full max-w-lg items-center px-container-margin py-stack-lg"
+        contentContainerClassName="mx-auto w-full max-w-lg items-center px-container-margin py-stack-sm"
       >
-        <View className="mb-stack-lg w-full items-center">
-          <View className="mb-4 h-16 w-16 items-center justify-center rounded-2xl bg-primary-container shadow-sm">
-            <MaterialIcons name="directions-car" size={30} color={themeColors.primary} />
+        {/* Fixed, per explicit request: this intro block (icon + title + subtitle) was tall enough
+            that the form below it didn't fit on screen without scrolling -- shrunk the icon, the
+            title's font size, and every surrounding margin so the whole form fits in view at once
+            on a typical phone screen. */}
+        <View className="mb-stack-sm w-full items-center">
+          <View className="mb-2 h-11 w-11 items-center justify-center rounded-2xl bg-primary-container shadow-sm">
+            <MaterialIcons name="directions-car" size={20} color={themeColors.primary} />
           </View>
-          <Text className="font-headline-lg-mobile text-headline-lg-mobile tracking-tight text-on-surface">
+          <Text className="text-[20px] font-bold leading-tight tracking-tight text-on-surface">
             Join Indigo Motion
           </Text>
-          <Text className="mt-2 font-body-md text-body-md text-on-surface-variant">
+          <Text className="mt-1 font-label-sm text-label-sm text-on-surface-variant">
             Start earning on your own schedule.
           </Text>
         </View>
 
         <View
-          className="w-full gap-stack-md rounded-xl border border-outline-variant bg-surface-container-lowest p-6"
+          className="w-full gap-stack-sm rounded-xl border border-outline-variant bg-surface-container-lowest p-4"
           style={{
             shadowColor: "#000000",
             shadowOffset: { width: 0, height: 1 },
@@ -127,7 +131,7 @@ export default function DriverRegisterScreen() {
                 <MaterialIcons name="person" size={16} color={themeColors.onSurfaceVariant} />
               </View>
               <TextInput
-                className="min-h-[56px] rounded-lg border border-transparent bg-surface-container-low pl-12 pr-4 font-body-md text-body-md text-on-surface focus:border-primary focus:bg-surface-container-lowest"
+                className="min-h-[46px] rounded-lg border border-transparent bg-surface-container-low pl-12 pr-4 font-body-md text-body-md text-on-surface focus:border-primary focus:bg-surface-container-lowest"
                 placeholder="e.g. Jane Doe"
               />
             </View>
@@ -140,7 +144,7 @@ export default function DriverRegisterScreen() {
                 <MaterialIcons name="mail" size={16} color={themeColors.onSurfaceVariant} />
               </View>
               <TextInput
-                className="min-h-[56px] rounded-lg border border-transparent bg-surface-container-low pl-12 pr-4 font-body-md text-body-md text-on-surface focus:border-primary focus:bg-surface-container-lowest"
+                className="min-h-[46px] rounded-lg border border-transparent bg-surface-container-low pl-12 pr-4 font-body-md text-body-md text-on-surface focus:border-primary focus:bg-surface-container-lowest"
                 placeholder="jane@example.com"
                 keyboardType="email-address"
                 autoCapitalize="none"
@@ -157,7 +161,7 @@ export default function DriverRegisterScreen() {
                 <MaterialIcons name="call" size={16} color={themeColors.onSurfaceVariant} />
               </View>
               <TextInput
-                className="min-h-[56px] rounded-lg border border-transparent bg-surface-container-low pl-12 pr-4 font-body-md text-body-md text-on-surface focus:border-primary focus:bg-surface-container-lowest"
+                className="min-h-[46px] rounded-lg border border-transparent bg-surface-container-low pl-12 pr-4 font-body-md text-body-md text-on-surface focus:border-primary focus:bg-surface-container-lowest"
                 placeholder="(555) 000-0000"
                 keyboardType="phone-pad"
                 value={phone}
@@ -173,7 +177,7 @@ export default function DriverRegisterScreen() {
                 <MaterialIcons name="lock" size={16} color={themeColors.onSurfaceVariant} />
               </View>
               <TextInput
-                className="min-h-[56px] rounded-lg border border-transparent bg-surface-container-low pl-12 pr-4 font-body-md text-body-md text-on-surface focus:border-primary focus:bg-surface-container-lowest"
+                className="min-h-[46px] rounded-lg border border-transparent bg-surface-container-low pl-12 pr-4 font-body-md text-body-md text-on-surface focus:border-primary focus:bg-surface-container-lowest"
                 placeholder="••••••••"
                 secureTextEntry
                 value={password}
@@ -194,7 +198,7 @@ export default function DriverRegisterScreen() {
                 <MaterialIcons name="lock" size={16} color={themeColors.onSurfaceVariant} />
               </View>
               <TextInput
-                className="min-h-[56px] rounded-lg border border-transparent bg-surface-container-low pl-12 pr-4 font-body-md text-body-md text-on-surface focus:border-primary focus:bg-surface-container-lowest"
+                className="min-h-[46px] rounded-lg border border-transparent bg-surface-container-low pl-12 pr-4 font-body-md text-body-md text-on-surface focus:border-primary focus:bg-surface-container-lowest"
                 placeholder="••••••••"
                 secureTextEntry
                 value={confirmPassword}
@@ -211,7 +215,7 @@ export default function DriverRegisterScreen() {
 
           <Pressable
             onPress={handleSignUp}
-            className="mt-4 min-h-[56px] w-full flex-row items-center justify-center rounded-lg bg-primary active:scale-[0.98]"
+            className="mt-2 min-h-[48px] w-full flex-row items-center justify-center rounded-lg bg-primary active:scale-[0.98]"
             style={{
               shadowColor: "#000000",
               shadowOffset: { width: 0, height: 4 },
@@ -225,8 +229,8 @@ export default function DriverRegisterScreen() {
             </Text>
           </Pressable>
 
-          <View className="mt-4 items-center">
-            <Text className="font-body-md text-body-md text-on-surface-variant">
+          <View className="mt-2 items-center">
+            <Text className="font-label-sm text-label-sm text-on-surface-variant">
               Already have an account?{" "}
               <Text
                 onPress={() => router.push("/(driver-auth)/login")}
@@ -238,7 +242,7 @@ export default function DriverRegisterScreen() {
           </View>
         </View>
 
-        <Text className="mt-8 px-4 text-center font-label-sm text-label-sm text-outline">
+        <Text className="mt-3 px-4 text-center font-label-sm text-label-sm text-outline">
           By signing up, you agree to Indigo Motion&apos;s{" "}
           <Text
             onPress={() => router.push("/(driver)/terms-of-service")}

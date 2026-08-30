@@ -5,6 +5,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { themeColors } from "@/constants/theme-colors";
+import { requestDrawerOpen } from "@/utils/drawer-open-request";
 
 // Source: "Active Ride" (Part 6). Reached by pushing from navigate-to-pickup.tsx's "I've Arrived".
 //
@@ -21,9 +22,9 @@ import { themeColors } from "@/constants/theme-colors";
 //
 // The header's "security" icon (shield) is wired to safety-center.tsx -- this is the SOS entry
 // point that screen's own header comment flagged as "not built yet" when it was created; it now
-// exists. The "menu" icon on the opposite side is left inert with a TODO: no destination was
-// specified for it, and unlike the (tabs) screens' hamburger-> settings.tsx convention, this is a
-// focused mid-ride screen, not a tab root, so guessing the same destination isn't a safe carryover.
+// exists. The "menu" icon actually opens the sidebar now, per explicit request -- see the
+// drawer-open-request.ts import and this file's own Pressable comment below for how, given this
+// screen sits outside the Drawer's navigation tree.
 //
 // Rule 5 approved presentation state / left inert (not guessed):
 // - The map is a static placeholder image, not real GPS/routing -- separate backend/Mapbox wiring.
@@ -55,14 +56,20 @@ export default function ActiveRideScreen() {
         className="absolute left-0 top-0 z-50 w-full flex-row items-center justify-between px-container-margin py-base"
       >
         {/* This screen sits outside the Dashboard/Earnings/Account drawer entirely (a focused
-            mid-ride flow, not part of that navigator's tree), so this icon can't literally open
-            that sidebar from here -- there's no ancestor path for the action to bubble to. Wired
-            to return to the Dashboard instead (same real-world intent as "menu": step out of this
-            focused screen back to the main app shell), rather than leaving it dead. */}
+            mid-ride flow, not part of that navigator's tree), so `DrawerActions.openDrawer()`
+            can't reach it directly from here -- there's no ancestor path for the action to bubble
+            to. `requestDrawerOpen()` sets a flag dashboard.tsx checks and consumes the moment it
+            gains focus (it dispatches the actual openDrawer() from inside the Drawer's own tree,
+            where the action can reach it) -- so tapping this genuinely opens the sidebar, not just
+            a plain return to the dashboard underneath it. */}
         <Pressable
-          onPress={() =>
-            router.dismissTo({ pathname: "/(driver)/(drawer)/(tabs)/dashboard", params: { status: "online" } })
-          }
+          onPress={() => {
+            requestDrawerOpen();
+            router.dismissTo({
+              pathname: "/(driver)/(drawer)/(tabs)/dashboard",
+              params: { status: "online" },
+            });
+          }}
           className="h-10 w-10 items-center justify-center rounded-full bg-surface shadow-md active:scale-95"
         >
           <MaterialIcons name="menu" size={24} color={themeColors.onSurface} />
