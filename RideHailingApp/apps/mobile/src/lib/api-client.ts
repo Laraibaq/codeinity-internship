@@ -94,10 +94,20 @@ export interface ApiErrorResponse {
   statusCode: number;
 }
 
+const NETWORK_ERROR_MESSAGE = "Can't reach the server — check your connection.";
+
 export function getApiErrorMessage(error: unknown, fallback: string): string {
-  if (axios.isAxiosError<ApiErrorResponse>(error) && error.response) {
-    const { message } = error.response.data;
-    return Array.isArray(message) ? message[0] : message;
+  if (axios.isAxiosError<ApiErrorResponse>(error)) {
+    if (error.response) {
+      const { message } = error.response.data;
+      return Array.isArray(message) ? message[0] : message;
+    }
+    // The request went out but nothing came back -- wrong host/port, server not running, no
+    // route to it (e.g. a physical device pointed at a LAN IP it can't actually reach), CORS
+    // rejection, timeout. Distinct from a real 4xx/5xx, and from whatever `fallback` covers.
+    if (error.request) {
+      return NETWORK_ERROR_MESSAGE;
+    }
   }
   return fallback;
 }
