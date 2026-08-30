@@ -74,6 +74,7 @@ export default function DriverLoginScreen() {
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [loginError, setLoginError] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   const handleLogin = async () => {
@@ -170,13 +171,20 @@ export default function DriverLoginScreen() {
               <TextInput
                 className="h-full flex-1 bg-transparent font-body-md text-body-md text-on-surface"
                 placeholder="Password"
-                secureTextEntry
+                secureTextEntry={!showPassword}
                 value={password}
                 onChangeText={(value) => {
                   setPassword(value);
                   setLoginError(null);
                 }}
               />
+              <Pressable onPress={() => setShowPassword((value) => !value)} hitSlop={8}>
+                <MaterialIcons
+                  name={showPassword ? "visibility-off" : "visibility"}
+                  size={16}
+                  color={themeColors.onSurfaceVariant}
+                />
+              </Pressable>
             </View>
 
             {loginError ? (

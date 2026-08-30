@@ -131,6 +131,8 @@ function PasswordField() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [justSaved, setJustSaved] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const handleSave = () => {
     if (newPassword.length < 6) {
@@ -155,22 +157,48 @@ function PasswordField() {
         <Text className="font-label-sm text-label-sm uppercase tracking-wider text-secondary">
           Password
         </Text>
-        <TextInput
-          className="min-h-[48px] rounded-lg border border-outline-variant bg-surface-container-lowest px-4 font-body-md text-body-md text-on-surface"
-          value={newPassword}
-          onChangeText={setNewPassword}
-          placeholder="New password"
-          placeholderTextColor={themeColors.outline}
-          secureTextEntry
-        />
-        <TextInput
-          className="min-h-[48px] rounded-lg border border-outline-variant bg-surface-container-lowest px-4 font-body-md text-body-md text-on-surface"
-          value={confirmPassword}
-          onChangeText={setConfirmPassword}
-          placeholder="Confirm new password"
-          placeholderTextColor={themeColors.outline}
-          secureTextEntry
-        />
+        <View className="relative">
+          <TextInput
+            className="min-h-[48px] rounded-lg border border-outline-variant bg-surface-container-lowest px-4 pr-12 font-body-md text-body-md text-on-surface"
+            value={newPassword}
+            onChangeText={setNewPassword}
+            placeholder="New password"
+            placeholderTextColor={themeColors.outline}
+            secureTextEntry={!showNewPassword}
+          />
+          <Pressable
+            onPress={() => setShowNewPassword((value) => !value)}
+            hitSlop={8}
+            className="absolute inset-y-0 right-0 z-10 justify-center pr-4"
+          >
+            <MaterialIcons
+              name={showNewPassword ? "visibility-off" : "visibility"}
+              size={16}
+              color={themeColors.outline}
+            />
+          </Pressable>
+        </View>
+        <View className="relative">
+          <TextInput
+            className="min-h-[48px] rounded-lg border border-outline-variant bg-surface-container-lowest px-4 pr-12 font-body-md text-body-md text-on-surface"
+            value={confirmPassword}
+            onChangeText={setConfirmPassword}
+            placeholder="Confirm new password"
+            placeholderTextColor={themeColors.outline}
+            secureTextEntry={!showConfirmPassword}
+          />
+          <Pressable
+            onPress={() => setShowConfirmPassword((value) => !value)}
+            hitSlop={8}
+            className="absolute inset-y-0 right-0 z-10 justify-center pr-4"
+          >
+            <MaterialIcons
+              name={showConfirmPassword ? "visibility-off" : "visibility"}
+              size={16}
+              color={themeColors.outline}
+            />
+          </Pressable>
+        </View>
         {error ? <Text className="font-label-sm text-label-sm text-error">{error}</Text> : null}
         <View className="flex-row justify-end gap-2">
           <Pressable

@@ -69,6 +69,8 @@ export default function DriverRegisterScreen() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [phoneError, setPhoneError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -215,15 +217,26 @@ export default function DriverRegisterScreen() {
                 <MaterialIcons name="lock" size={16} color={themeColors.onSurfaceVariant} />
               </View>
               <TextInput
-                className="min-h-[46px] rounded-lg border border-transparent bg-surface-container-low pl-12 pr-4 font-body-md text-body-md text-on-surface focus:border-primary focus:bg-surface-container-lowest"
+                className="min-h-[46px] rounded-lg border border-transparent bg-surface-container-low pl-12 pr-12 font-body-md text-body-md text-on-surface focus:border-primary focus:bg-surface-container-lowest"
                 placeholder="••••••••"
-                secureTextEntry
+                secureTextEntry={!showPassword}
                 value={password}
                 onChangeText={(value) => {
                   setPassword(value);
                   setPasswordError(null);
                 }}
               />
+              <Pressable
+                onPress={() => setShowPassword((value) => !value)}
+                hitSlop={8}
+                className="absolute inset-y-0 right-0 z-10 justify-center pr-4"
+              >
+                <MaterialIcons
+                  name={showPassword ? "visibility-off" : "visibility"}
+                  size={16}
+                  color={themeColors.onSurfaceVariant}
+                />
+              </Pressable>
             </View>
           </View>
 
@@ -236,15 +249,26 @@ export default function DriverRegisterScreen() {
                 <MaterialIcons name="lock" size={16} color={themeColors.onSurfaceVariant} />
               </View>
               <TextInput
-                className="min-h-[46px] rounded-lg border border-transparent bg-surface-container-low pl-12 pr-4 font-body-md text-body-md text-on-surface focus:border-primary focus:bg-surface-container-lowest"
+                className="min-h-[46px] rounded-lg border border-transparent bg-surface-container-low pl-12 pr-12 font-body-md text-body-md text-on-surface focus:border-primary focus:bg-surface-container-lowest"
                 placeholder="••••••••"
-                secureTextEntry
+                secureTextEntry={!showConfirmPassword}
                 value={confirmPassword}
                 onChangeText={(value) => {
                   setConfirmPassword(value);
                   setPasswordError(null);
                 }}
               />
+              <Pressable
+                onPress={() => setShowConfirmPassword((value) => !value)}
+                hitSlop={8}
+                className="absolute inset-y-0 right-0 z-10 justify-center pr-4"
+              >
+                <MaterialIcons
+                  name={showConfirmPassword ? "visibility-off" : "visibility"}
+                  size={16}
+                  color={themeColors.onSurfaceVariant}
+                />
+              </Pressable>
             </View>
             {passwordError ? (
               <Text className="mt-1 font-label-sm text-label-sm text-error">{passwordError}</Text>

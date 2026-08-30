@@ -80,6 +80,8 @@ export default function DriverResetPasswordScreen() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [modalState, setModalState] = useState<"none" | "success" | "failure">("none");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const handleResetPassword = () => {
     setIsSubmitting(true);
@@ -164,13 +166,24 @@ export default function DriverResetPasswordScreen() {
                   <MaterialIcons name="lock" size={16} color={themeColors.outline} />
                 </View>
                 <TextInput
-                  className="h-14 w-full rounded-lg border border-outline-variant bg-surface-container-low pl-12 pr-4 text-on-surface focus:border-primary"
+                  className="h-14 w-full rounded-lg border border-outline-variant bg-surface-container-low pl-12 pr-12 text-on-surface focus:border-primary"
                   placeholder="Enter new password"
                   placeholderTextColor={themeColors.outline}
-                  secureTextEntry
+                  secureTextEntry={!showNewPassword}
                   value={newPassword}
                   onChangeText={setNewPassword}
                 />
+                <Pressable
+                  onPress={() => setShowNewPassword((value) => !value)}
+                  hitSlop={8}
+                  className="absolute inset-y-0 right-0 z-10 justify-center pr-4"
+                >
+                  <MaterialIcons
+                    name={showNewPassword ? "visibility-off" : "visibility"}
+                    size={16}
+                    color={themeColors.outline}
+                  />
+                </Pressable>
               </View>
             </View>
 
@@ -186,13 +199,24 @@ export default function DriverResetPasswordScreen() {
                   <MaterialIcons name="lock-clock" size={16} color={themeColors.outline} />
                 </View>
                 <TextInput
-                  className="h-14 w-full rounded-lg border border-outline-variant bg-surface-container-low pl-12 pr-4 text-on-surface focus:border-primary"
+                  className="h-14 w-full rounded-lg border border-outline-variant bg-surface-container-low pl-12 pr-12 text-on-surface focus:border-primary"
                   placeholder="Confirm new password"
                   placeholderTextColor={themeColors.outline}
-                  secureTextEntry
+                  secureTextEntry={!showConfirmPassword}
                   value={confirmPassword}
                   onChangeText={setConfirmPassword}
                 />
+                <Pressable
+                  onPress={() => setShowConfirmPassword((value) => !value)}
+                  hitSlop={8}
+                  className="absolute inset-y-0 right-0 z-10 justify-center pr-4"
+                >
+                  <MaterialIcons
+                    name={showConfirmPassword ? "visibility-off" : "visibility"}
+                    size={16}
+                    color={themeColors.outline}
+                  />
+                </Pressable>
               </View>
             </View>
 
