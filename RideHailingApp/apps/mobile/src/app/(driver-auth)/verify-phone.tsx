@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { Keyboard, Pressable, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Keyboard, Pressable, Text, TextInput, View } from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { apiClient, getApiErrorMessage } from "@/lib/api-client";
 import { themeColors } from "@/constants/theme-colors";
 import { registrationDraft } from "@/utils/registration-draft";
 
@@ -34,8 +35,9 @@ import { registrationDraft } from "@/utils/registration-draft";
 // to top-anchored (`pt-stack-lg`, no `justify-center`), matching forgot-password.tsx's layout for
 // the same kind of single-purpose auth-action screen.
 //
-// Fixed: "Resend" was already wired correctly (`setTimeLeft(30)` on press, disabled while the
-// countdown is running) -- no change needed there, kept as-is.
+// "Resend" now also re-calls POST /auth/otp/request (previously just reset the countdown with
+// `setTimeLeft(30)` and never actually sent anything) -- the countdown/disabled-while-running
+// behavior itself was already correct and is unchanged.
 //
 // Fixed: the keyboard didn't dismiss after the 6th digit -- `Keyboard.dismiss()` is now called
 // once all `OTP_LENGTH` digits are filled.
@@ -74,6 +76,8 @@ export default function DriverVerifyPhoneScreen() {
   const insets = useSafeAreaInsets();
   const [digits, setDigits] = useState<string[]>(Array(OTP_LENGTH).fill(""));
   const [timeLeft, setTimeLeft] = useState(30);
+  const [otpError, setOtpError] = useState<string | null>(null);
+  const [verifying, setVerifying] = useState(false);
   const inputRefs = useRef<(TextInput | null)[]>([]);
 
   useEffect(() => {
@@ -81,6 +85,15 @@ export default function DriverVerifyPhoneScreen() {
     const id = setTimeout(() => setTimeLeft((t) => t - 1), 1000);
     return () => clearTimeout(id);
   }, [timeLeft]);
+
+  // Fires the initial code send as soon as this screen mounts, using the phone number register.tsx
+  // just wrote to registrationDraft.
+  useEffect(() => {
+    if (!registrationDraft.phone) return;
+    apiClient.post("/auth/otp/request", { phone: registrationDraft.phone }).catch((error) => {
+      setOtpError(getApiErrorMessage(error, "Couldn't send a verification code. Try resending."));
+    });
+  }, []);
 
   const handleChangeDigit = (index: number, value: string) => {
     const digit = value.slice(-1);
@@ -103,10 +116,37 @@ export default function DriverVerifyPhoneScreen() {
     }
   };
 
+  const handleVerify = async () => {
+    const code = digits.join("");
+    if (code.length < OTP_LENGTH) {
+      setOtpError("Enter the full 6-digit code.");
+      return;
+    }
+    setOtpError(null);
+    setVerifying(true);
+    try {
+      await apiClient.post("/auth/otp/verify", { phone: registrationDraft.phone, code });
+      router.push("/(driver-auth)/register-personal-info");
+    } catch (error) {
+      // Digits are deliberately left as-is -- don't clear a correct-except-for-one-digit entry.
+      setOtpError(getApiErrorMessage(error, "That code didn't work. Please try again."));
+    } finally {
+      setVerifying(false);
+    }
+  };
+
+  const handleResend = async () => {
+    setOtpError(null);
+    setTimeLeft(30);
+    try {
+      await apiClient.post("/auth/otp/request", { phone: registrationDraft.phone });
+    } catch (error) {
+      setOtpError(getApiErrorMessage(error, "Couldn't resend the code. Please try again."));
+    }
+  };
+
   const seconds = timeLeft < 10 ? `0${timeLeft}` : `${timeLeft}`;
-  const phoneDisplay = registrationDraft.phone.trim()
-    ? `+1 ${registrationDraft.phone.trim()}`
-    : "your phone";
+  const phoneDisplay = registrationDraft.phone.trim() || "your phone";
 
   return (
     <View className="min-h-screen flex-1 bg-surface">
@@ -164,11 +204,22 @@ export default function DriverVerifyPhoneScreen() {
           ))}
         </View>
 
+        {otpError ? (
+          <Text className="mb-stack-md text-center font-label-sm text-label-sm text-error">
+            {otpError}
+          </Text>
+        ) : null}
+
         <Pressable
-          onPress={() => router.push("/(driver-auth)/register-personal-info")}
-          className="mb-stack-md w-full items-center justify-center rounded-xl bg-primary py-4 shadow-lg active:scale-95"
+          onPress={handleVerify}
+          disabled={verifying}
+          className="mb-stack-md w-full items-center justify-center rounded-xl bg-primary py-4 shadow-lg active:scale-95 disabled:opacity-70"
         >
-          <Text className="font-label-sm text-label-sm text-on-primary">Verify</Text>
+          {verifying ? (
+            <ActivityIndicator color={themeColors.onPrimary} />
+          ) : (
+            <Text className="font-label-sm text-label-sm text-on-primary">Verify</Text>
+          )}
         </Pressable>
 
         <View className="flex-row items-center justify-center">
@@ -181,7 +232,7 @@ export default function DriverVerifyPhoneScreen() {
               `style` prop instead. */}
           <Pressable
             disabled={timeLeft > 0}
-            onPress={() => setTimeLeft(30)}
+            onPress={handleResend}
             className="ml-1"
           >
             <Text

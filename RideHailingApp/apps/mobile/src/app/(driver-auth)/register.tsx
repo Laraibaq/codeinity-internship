@@ -1,11 +1,13 @@
 import { useState } from "react";
-import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { apiClient, getApiErrorMessage, getApiErrorStatus } from "@/lib/api-client";
 import { themeColors } from "@/constants/theme-colors";
 import { registrationDraft } from "@/utils/registration-draft";
+import { normalizePhone } from "@/utils/phone";
 
 // Source marker for this screen was "Driver Signup", but its <title> ("Driver Registration -
 // Indigo Motion") and on-screen <h1> ("Driver Registration") match the table's "Driver
@@ -61,19 +63,45 @@ import { registrationDraft } from "@/utils/registration-draft";
 export default function DriverRegisterScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [phoneError, setPhoneError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
-  const handleSignUp = () => {
+  const handleSignUp = async () => {
     if (password !== confirmPassword) {
       setPasswordError("Passwords don't match.");
       return;
     }
     setPasswordError(null);
-    registrationDraft.phone = phone;
-    router.push("/(driver-auth)/verify-phone");
+    setFormError(null);
+    setPhoneError(null);
+
+    const normalizedPhone = normalizePhone(phone);
+    setSubmitting(true);
+    try {
+      await apiClient.post("/auth/register/driver", {
+        name,
+        email: email.trim() || undefined,
+        phone: normalizedPhone,
+        password,
+      });
+      registrationDraft.phone = normalizedPhone;
+      router.push("/(driver-auth)/verify-phone");
+    } catch (error) {
+      if (getApiErrorStatus(error) === 409) {
+        setPhoneError("This phone number or email is already registered.");
+      } else {
+        setFormError(getApiErrorMessage(error, "Couldn't create your account. Please try again."));
+      }
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -133,6 +161,8 @@ export default function DriverRegisterScreen() {
               <TextInput
                 className="min-h-[46px] rounded-lg border border-transparent bg-surface-container-low pl-12 pr-4 font-body-md text-body-md text-on-surface focus:border-primary focus:bg-surface-container-lowest"
                 placeholder="e.g. Jane Doe"
+                value={name}
+                onChangeText={setName}
               />
             </View>
           </View>
@@ -148,6 +178,8 @@ export default function DriverRegisterScreen() {
                 placeholder="jane@example.com"
                 keyboardType="email-address"
                 autoCapitalize="none"
+                value={email}
+                onChangeText={setEmail}
               />
             </View>
           </View>
@@ -165,9 +197,15 @@ export default function DriverRegisterScreen() {
                 placeholder="(555) 000-0000"
                 keyboardType="phone-pad"
                 value={phone}
-                onChangeText={setPhone}
+                onChangeText={(value) => {
+                  setPhone(value);
+                  setPhoneError(null);
+                }}
               />
             </View>
+            {phoneError ? (
+              <Text className="mt-1 font-label-sm text-label-sm text-error">{phoneError}</Text>
+            ) : null}
           </View>
 
           <View className="gap-1">
@@ -213,9 +251,14 @@ export default function DriverRegisterScreen() {
             ) : null}
           </View>
 
+          {formError ? (
+            <Text className="text-center font-label-sm text-label-sm text-error">{formError}</Text>
+          ) : null}
+
           <Pressable
             onPress={handleSignUp}
-            className="mt-2 min-h-[48px] w-full flex-row items-center justify-center rounded-lg bg-primary active:scale-[0.98]"
+            disabled={submitting}
+            className="mt-2 min-h-[48px] w-full flex-row items-center justify-center rounded-lg bg-primary active:scale-[0.98] disabled:opacity-70"
             style={{
               shadowColor: "#000000",
               shadowOffset: { width: 0, height: 4 },
@@ -224,9 +267,13 @@ export default function DriverRegisterScreen() {
               elevation: 3,
             }}
           >
-            <Text className="font-label-sm text-label-sm tracking-wide text-on-primary">
-              SIGN UP
-            </Text>
+            {submitting ? (
+              <ActivityIndicator color={themeColors.onPrimary} />
+            ) : (
+              <Text className="font-label-sm text-label-sm tracking-wide text-on-primary">
+                SIGN UP
+              </Text>
+            )}
           </Pressable>
 
           <View className="mt-2 items-center">

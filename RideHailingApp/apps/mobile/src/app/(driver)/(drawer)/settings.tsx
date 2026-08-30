@@ -1,17 +1,11 @@
 import { useState } from "react";
 import { Pressable, ScrollView, Switch, Text, TextInput, View } from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
-import * as SecureStore from "expo-secure-store";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { clearAuthTokens } from "@/lib/api-client";
 import { themeColors } from "@/constants/theme-colors";
-
-// TODO: this key name is a placeholder guess -- no login/registration screen in this project
-// actually stores a JWT in SecureStore yet (they're all UI-shell-only so far), so this deletion is
-// currently a no-op. Update this constant once real auth/token storage exists, to whatever key it
-// actually uses.
-const AUTH_TOKEN_KEY = "driverAuthToken";
 
 // Rule 3 substitutions used on this screen:
 // - Icon-ligature -> MaterialIcons substitution as on every screen in this project; every icon
@@ -228,7 +222,7 @@ export default function DriverSettingsScreen() {
   const [email, setEmail] = useState("alex.thompson@example.com");
 
   const handleSignOut = async () => {
-    await SecureStore.deleteItemAsync(AUTH_TOKEN_KEY);
+    await clearAuthTokens();
     router.replace("/(driver-auth)/login");
   };
 

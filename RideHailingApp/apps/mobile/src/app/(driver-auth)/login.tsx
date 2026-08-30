@@ -1,11 +1,13 @@
 import { useState } from "react";
-import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { apiClient, getApiErrorMessage, storeAuthTokens } from "@/lib/api-client";
 import { themeColors } from "@/constants/theme-colors";
 import { LoginMethodToggle } from "@/components/login-method-toggle";
+import { normalizePhone } from "@/utils/phone";
 
 // Fixed: this screen had no header/back arrow at all, unlike every other (driver-auth) screen --
 // added the same h-16 back-arrow + title header pattern used throughout this project, wired to
@@ -54,13 +56,12 @@ import { LoginMethodToggle } from "@/components/login-method-toggle";
 //
 // "Forgot Password?" now pushes forgot-password.tsx (was inert).
 //
-// "Login" now uses `router.replace` (not `push`) to dashboard.tsx, so a logged-in driver can't
-// swipe-back into the login screen. TODO: this always-go-to-dashboard behavior is a placeholder --
-// real behavior should call the login API first, then route based on the driver's actual
-// verification status (approved -> dashboard, pending -> verification-status, rejected ->
-// verification-status in its rejected state) instead of assuming approved every time. Going straight
-// to dashboard is the right shortcut for now since that's the common case during testing, but this
-// needs to be revisited once real auth exists.
+// "Login" now calls POST /auth/login for real, stores both tokens, and only then
+// `router.replace`s (not `push`) to dashboard.tsx, so a logged-in driver can't swipe-back into the
+// login screen. TODO: still always routes to dashboard on success regardless of the driver's actual
+// verification status -- should route pending/rejected drivers to verification-status instead once
+// that check exists. Going straight to dashboard remains the right shortcut for now since that's
+// the common case during testing.
 //
 // Vertical centering: removed. Content now flows naturally from the top of the screen, directly
 // below the header, rather than being centered or pushed down -- no more flexGrow/justifyContent on
@@ -70,6 +71,29 @@ export default function DriverLoginScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [loginMethod, setLoginMethod] = useState<"phone" | "email">("phone");
+  const [identifier, setIdentifier] = useState("");
+  const [password, setPassword] = useState("");
+  const [loginError, setLoginError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleLogin = async () => {
+    setLoginError(null);
+    setSubmitting(true);
+    try {
+      const normalizedIdentifier =
+        loginMethod === "phone" ? normalizePhone(identifier) : identifier.trim();
+      const { data } = await apiClient.post<{ accessToken: string; refreshToken: string }>(
+        "/auth/login",
+        { identifier: normalizedIdentifier, password },
+      );
+      await storeAuthTokens(data.accessToken, data.refreshToken);
+      router.replace("/(driver)/(drawer)/(tabs)/dashboard");
+    } catch (error) {
+      setLoginError(getApiErrorMessage(error, "Couldn't log you in. Please try again."));
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   return (
     <View className="flex-1 bg-surface">
@@ -127,6 +151,12 @@ export default function DriverLoginScreen() {
                 className="h-full flex-1 bg-transparent font-body-md text-body-md text-on-surface"
                 placeholder={loginMethod === "phone" ? "Phone Number" : "Email Address"}
                 keyboardType={loginMethod === "phone" ? "phone-pad" : "email-address"}
+                autoCapitalize="none"
+                value={identifier}
+                onChangeText={(value) => {
+                  setIdentifier(value);
+                  setLoginError(null);
+                }}
               />
             </View>
 
@@ -141,8 +171,19 @@ export default function DriverLoginScreen() {
                 className="h-full flex-1 bg-transparent font-body-md text-body-md text-on-surface"
                 placeholder="Password"
                 secureTextEntry
+                value={password}
+                onChangeText={(value) => {
+                  setPassword(value);
+                  setLoginError(null);
+                }}
               />
             </View>
+
+            {loginError ? (
+              <Text className="text-center font-label-sm text-label-sm text-error">
+                {loginError}
+              </Text>
+            ) : null}
 
             <View className="mt-stack-sm flex-row justify-end">
               <Text
@@ -154,8 +195,9 @@ export default function DriverLoginScreen() {
             </View>
 
             <Pressable
-              onPress={() => router.replace("/(driver)/(drawer)/(tabs)/dashboard")}
-              className="mt-stack-lg h-[56px] w-full flex-row items-center justify-center rounded-lg bg-primary active:scale-[0.98]"
+              onPress={handleLogin}
+              disabled={submitting}
+              className="mt-stack-lg h-[56px] w-full flex-row items-center justify-center rounded-lg bg-primary active:scale-[0.98] disabled:opacity-70"
               style={{
                 shadowColor: "#000000",
                 shadowOffset: { width: 0, height: 4 },
@@ -164,13 +206,19 @@ export default function DriverLoginScreen() {
                 elevation: 4,
               }}
             >
-              <Text className="font-label-sm text-label-sm text-on-primary">Login</Text>
-              <MaterialIcons
-                name="arrow-forward"
-                size={12}
-                color={themeColors.onPrimary}
-                style={{ marginLeft: 8 }}
-              />
+              {submitting ? (
+                <ActivityIndicator color={themeColors.onPrimary} />
+              ) : (
+                <>
+                  <Text className="font-label-sm text-label-sm text-on-primary">Login</Text>
+                  <MaterialIcons
+                    name="arrow-forward"
+                    size={12}
+                    color={themeColors.onPrimary}
+                    style={{ marginLeft: 8 }}
+                  />
+                </>
+              )}
             </Pressable>
           </View>
 
