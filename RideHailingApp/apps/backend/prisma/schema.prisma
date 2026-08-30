@@ -5,6 +5,11 @@ generator client {
   provider        = "prisma-client"
   output          = "../generated/prisma"
   previewFeatures = ["postgresqlExtensions"]
+  // This backend has no "type": "module" anywhere (it's CommonJS), but the generator's ESM
+  // default emits `import.meta.url` that breaks when tsc downcompiles it to CJS without a
+  // matching package.json boundary. Forcing cjs output here matches reality and needs no
+  // extra build-step/asset-copying to keep working.
+  moduleFormat    = "cjs"
 }
 
 datasource db {
@@ -58,6 +63,7 @@ model User {
   phone           String   @unique
   email           String?  @unique
   passwordHash    String
+  phoneVerified   Boolean  @default(false)
   profilePhotoUrl String?
   rating          Float?
   rideCount       Int      @default(0)
@@ -75,10 +81,11 @@ model Driver {
   phone              String             @unique
   email              String?            @unique
   passwordHash       String
-  licenseNumber      String
-  licenseDocUrl      String
-  cnicNumber         String
-  cnicDocUrl         String
+  phoneVerified      Boolean            @default(false)
+  licenseNumber      String?
+  licenseDocUrl      String?
+  cnicNumber         String?
+  cnicDocUrl         String?
   verificationStatus VerificationStatus @default(pending)
   rating             Float?
   isOnline           Boolean            @default(false)

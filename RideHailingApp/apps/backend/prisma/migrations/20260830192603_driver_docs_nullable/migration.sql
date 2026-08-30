@@ -1,0 +1,5 @@
+-- AlterTable
+ALTER TABLE "drivers" ALTER COLUMN "licenseNumber" DROP NOT NULL,
+ALTER COLUMN "licenseDocUrl" DROP NOT NULL,
+ALTER COLUMN "cnicNumber" DROP NOT NULL,
+ALTER COLUMN "cnicDocUrl" DROP NOT NULL;
