@@ -1,10 +1,11 @@
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Image, Pressable, ScrollView, Text, View } from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { themeColors } from "@/constants/theme-colors";
 import { registrationDraft, type DraftVehicleType } from "@/utils/registration-draft";
+import { useDocumentUpload, type DocumentType } from "@/hooks/use-document-upload";
 
 // Recreated screen: an earlier "Vehicle Photo Upload" screen existed at this same path, but was
 // deleted along with two other files from an alternate registration flow that was abandoned in favor
@@ -15,9 +16,10 @@ import { registrationDraft, type DraftVehicleType } from "@/utils/registration-d
 // for the described content (2x2 Exterior Front/Side/Back + Interior upload cards, a Photo
 // Guidelines box, a Submit Photos button) rather than restored verbatim:
 // - Each upload card reuses register-license-upload.tsx's card layout (icon circle, label, "Tap to
-//   upload or take photo" subtext, "Pending" status pill), arranged 2x2 instead of stacked -- same
-//   rule-5 treatment as that screen: inert Pressables, no expo-image-picker wiring, static "Pending"
-//   pill.
+//   upload or take photo" subtext, "Pending" status pill), arranged 2x2 instead of stacked. Now
+//   wired for real (Phase 2), same pattern as that screen's LicenseUploadCard: each of the 4 cards
+//   is its own useDocumentUpload instance, mapped by POSITION (not the slot's own label) to the
+//   backend's 4 fixed vehicle photo types -- see DOCUMENT_TYPE_BY_SLOT_INDEX below for why.
 // - The Photo Guidelines box reuses register-profile-photo.tsx's card pattern verbatim (uppercase
 //   title, checkmark-icon bullet rows).
 //
@@ -76,29 +78,77 @@ const VEHICLE_LABEL: Record<DraftVehicleType, string> = {
   rickshaw: "rickshaw",
 };
 
+// The backend only has 4 generic vehicle photo slots (front/side/back/interior) -- it doesn't know
+// about per-vehicle-type labels like bike's "License Plate" 4th slot. Slots map by POSITION, not by
+// their own `key`/label, so whatever the 4th slot is called in the UI always lands in the same
+// photoInteriorUrl field.
+const DOCUMENT_TYPE_BY_SLOT_INDEX: DocumentType[] = [
+  "vehicle_photo_front",
+  "vehicle_photo_side",
+  "vehicle_photo_back",
+  "vehicle_photo_interior",
+];
+
 function PhotoUploadCard({
   slot,
+  documentType,
 }: {
   slot: { key: string; label: string; icon: keyof typeof MaterialIcons.glyphMap };
+  documentType: DocumentType;
 }) {
+  const { uri, uploading, uploaded, error, pickFromLibrary, pickFromCamera } =
+    useDocumentUpload(documentType);
+
+  const handlePress = () => {
+    Alert.alert(`Upload ${slot.label}`, "Take a photo or choose one from your library.", [
+      { text: "Take Photo", onPress: () => void pickFromCamera() },
+      { text: "Choose from Library", onPress: () => void pickFromLibrary() },
+      { text: "Cancel", style: "cancel" },
+    ]);
+  };
+
+  const statusLabel = uploading ? "Uploading..." : uploaded ? "Uploaded" : "Pending";
+  const statusColor = uploaded ? themeColors.primary : themeColors.outline;
+
   return (
-    <Pressable className="relative flex-1 items-center gap-stack-sm rounded-xl border border-outline-variant bg-surface-container-lowest p-stack-md shadow-sm">
-      <View className="h-14 w-14 items-center justify-center rounded-full bg-surface-container-low">
-        <MaterialIcons name={slot.icon} size={26} color={themeColors.primary} />
-      </View>
-      <View className="items-center">
-        <Text className="text-center font-label-sm text-label-sm text-on-surface">
-          Upload {slot.label}
-        </Text>
-        <Text className="mt-1 text-center font-body-md text-body-md text-on-surface-variant">
-          Tap to upload or take photo
-        </Text>
-      </View>
-      <View className="absolute right-2 top-2 flex-row items-center gap-1 rounded-full bg-surface-container-high px-2 py-1">
-        <View className="h-2 w-2 rounded-full bg-outline" />
-        <Text className="font-label-sm text-label-sm text-on-surface-variant">Pending</Text>
-      </View>
-    </Pressable>
+    <View className="flex-1 gap-1">
+      <Pressable
+        onPress={handlePress}
+        disabled={uploading}
+        className="relative items-center gap-stack-sm rounded-xl border border-outline-variant bg-surface-container-lowest p-stack-md shadow-sm disabled:opacity-70"
+      >
+        <View className="h-14 w-14 items-center justify-center overflow-hidden rounded-full bg-surface-container-low">
+          {uri ? (
+            <Image source={{ uri }} className="h-full w-full" resizeMode="cover" />
+          ) : (
+            <MaterialIcons name={slot.icon} size={26} color={themeColors.primary} />
+          )}
+          {uploading ? (
+            <View
+              className="absolute inset-0 items-center justify-center"
+              style={{ backgroundColor: "rgba(21,28,39,0.4)" }}
+            >
+              <ActivityIndicator color={themeColors.onPrimary} size="small" />
+            </View>
+          ) : null}
+        </View>
+        <View className="items-center">
+          <Text className="text-center font-label-sm text-label-sm text-on-surface">
+            Upload {slot.label}
+          </Text>
+          <Text className="mt-1 text-center font-body-md text-body-md text-on-surface-variant">
+            {uri ? "Tap to retake or replace" : "Tap to upload or take photo"}
+          </Text>
+        </View>
+        <View className="absolute right-2 top-2 flex-row items-center gap-1 rounded-full bg-surface-container-high px-2 py-1">
+          <View className="h-2 w-2 rounded-full" style={{ backgroundColor: statusColor }} />
+          <Text className="font-label-sm text-label-sm text-on-surface-variant">{statusLabel}</Text>
+        </View>
+      </Pressable>
+      {error ? (
+        <Text className="text-center font-label-sm text-label-sm text-error">{error}</Text>
+      ) : null}
+    </View>
   );
 }
 
@@ -151,12 +201,12 @@ export default function DriverRegisterVehiclePhotosScreen() {
 
         <View className="gap-stack-md">
           <View className="flex-row gap-stack-md">
-            <PhotoUploadCard slot={photoSlots[0]} />
-            <PhotoUploadCard slot={photoSlots[1]} />
+            <PhotoUploadCard slot={photoSlots[0]} documentType={DOCUMENT_TYPE_BY_SLOT_INDEX[0]} />
+            <PhotoUploadCard slot={photoSlots[1]} documentType={DOCUMENT_TYPE_BY_SLOT_INDEX[1]} />
           </View>
           <View className="flex-row gap-stack-md">
-            <PhotoUploadCard slot={photoSlots[2]} />
-            <PhotoUploadCard slot={photoSlots[3]} />
+            <PhotoUploadCard slot={photoSlots[2]} documentType={DOCUMENT_TYPE_BY_SLOT_INDEX[2]} />
+            <PhotoUploadCard slot={photoSlots[3]} documentType={DOCUMENT_TYPE_BY_SLOT_INDEX[3]} />
           </View>
         </View>
 

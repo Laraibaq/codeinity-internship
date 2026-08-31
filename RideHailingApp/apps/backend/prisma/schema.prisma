@@ -82,8 +82,12 @@ model Driver {
   email              String?            @unique
   passwordHash       String
   phoneVerified      Boolean            @default(false)
+  profilePhotoUrl    String?
   licenseNumber      String?
-  licenseDocUrl      String?
+  // Front/back are two separate uploads (register-license-upload.tsx) -- unlike cnicDocUrl below
+  // (one identity document), a driving license has meaningfully different content on each side.
+  licenseDocFrontUrl String?
+  licenseDocBackUrl  String?
   cnicNumber         String?
   cnicDocUrl         String?
   verificationStatus VerificationStatus @default(pending)
@@ -102,14 +106,22 @@ model Driver {
 }
 
 model Vehicle {
-  id                 String      @id @default(uuid()) @db.Uuid
-  driverId           String      @unique @db.Uuid
-  type               VehicleType
-  make               String
-  model              String
-  color              String
-  registrationNumber String      @unique
-  registrationDocUrl String
+  id       String       @id @default(uuid()) @db.Uuid
+  driverId String       @unique @db.Uuid
+  // All nullable: a vehicle document/photo can be uploaded (POST /drivers/me/documents, which
+  // upserts a minimal row keyed by driverId) before the vehicle-info text fields are ever
+  // submitted via their own future endpoint.
+  type               VehicleType?
+  make               String?
+  model              String?
+  color              String?
+  registrationNumber String?      @unique
+  registrationDocUrl String?
+  insuranceDocUrl    String?
+  photoFrontUrl      String?
+  photoSideUrl       String?
+  photoBackUrl       String?
+  photoInteriorUrl   String?
 
   driver Driver @relation(fields: [driverId], references: [id])
 
