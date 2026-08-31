@@ -17,6 +17,7 @@ import { PasswordResetVerifyDto } from './dto/password-reset-verify.dto';
 import { RefreshDto } from './dto/refresh.dto';
 import { RegisterDriverDto } from './dto/register-driver.dto';
 import { RegisterPassengerDto } from './dto/register-passenger.dto';
+import { EmailService } from './email.service';
 import { JwtPayload, PasswordResetTokenPayload } from './jwt-payload.interface';
 import { OtpService } from './otp.service';
 
@@ -46,6 +47,7 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
     private readonly otp: OtpService,
+    private readonly email: EmailService,
   ) {}
 
   async registerDriver(dto: RegisterDriverDto) {
@@ -82,8 +84,18 @@ export class AuthService {
     }
   }
 
-  requestOtp(dto: OtpRequestDto) {
-    this.otp.request(SIGNUP_OTP_PURPOSE, dto.phone);
+  async requestOtp(dto: OtpRequestDto) {
+    const code = this.otp.request(SIGNUP_OTP_PURPOSE, dto.phone);
+
+    // The account signing up gave both a phone and (optionally) an email -- SMS delivery is still
+    // just the OtpService console-log stub (no Twilio account exists), but email delivery is real
+    // (see EmailService), so send the same code there whenever an email is on file. This is what
+    // actually makes the signup-verification flow testable end-to-end without SMS.
+    const account = await this.findAccountByIdentifier(dto.phone);
+    if (account?.email) {
+      await this.email.sendOtpCode(account.email, code);
+    }
+
     return { message: 'OTP sent' };
   }
 
@@ -141,7 +153,10 @@ export class AuthService {
     // Same response whether or not the account exists -- otherwise this endpoint would let anyone
     // check which phones/emails have accounts just by watching which response they get back.
     if (account) {
-      this.otp.request(PASSWORD_RESET_OTP_PURPOSE, dto.identifier);
+      const code = this.otp.request(PASSWORD_RESET_OTP_PURPOSE, dto.identifier);
+      if (account.email) {
+        await this.email.sendOtpCode(account.email, code);
+      }
     }
     return { message: 'If that account exists, a reset code has been sent.' };
   }
