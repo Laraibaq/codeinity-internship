@@ -13,7 +13,9 @@ import { BlurView } from "expo-blur";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { apiClient, getApiErrorMessage } from "@/lib/api-client";
 import { themeColors } from "@/constants/theme-colors";
+import { passwordResetDraft } from "@/utils/password-reset-draft";
 
 // Fixed (Root Cause B of this batch): the form card (2 password fields + requirements list +
 // button) wasn't in a ScrollView, sitting in a plain centered View below the fixed header -- on a
@@ -79,21 +81,36 @@ export default function DriverResetPasswordScreen() {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [modalState, setModalState] = useState<"none" | "success" | "failure">("none");
+  const [failureMessage, setFailureMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  const handleResetPassword = () => {
+  // Now a real call to POST /auth/password-reset/confirm, using the reset token
+  // reset-password-verify.tsx obtained -- the mismatched-passwords check stays as client-side
+  // validation (no reason to round-trip to the server for that), everything else routes through
+  // the actual API response instead of the placeholder timeout.
+  const handleResetPassword = async () => {
+    if (!newPassword || newPassword !== confirmPassword) {
+      setFailureMessage("Passwords don't match.");
+      setModalState("failure");
+      return;
+    }
     setIsSubmitting(true);
-    // TODO: this delay -- and the success/failure decision below -- are placeholders standing in
-    // for the real password-reset API call and its response. Remove the setTimeout and the
-    // mismatched-passwords check once that exists -- the loading-state UX (disabled button, spinner,
-    // "Resetting...") and the success/failure modals should stay and just react to the real request
-    // instead.
-    setTimeout(() => {
+    try {
+      await apiClient.post("/auth/password-reset/confirm", {
+        resetToken: passwordResetDraft.resetToken,
+        password: newPassword,
+      });
+      setModalState("success");
+    } catch (error) {
+      setFailureMessage(
+        getApiErrorMessage(error, "Something went wrong resetting your password. Please try again."),
+      );
+      setModalState("failure");
+    } finally {
       setIsSubmitting(false);
-      setModalState(newPassword && newPassword === confirmPassword ? "success" : "failure");
-    }, 900);
+    }
   };
 
   return (
@@ -349,7 +366,7 @@ export default function DriverResetPasswordScreen() {
                 Couldn&apos;t Update Password
               </Text>
               <Text className="mb-stack-lg text-center font-body-md text-body-md text-on-surface-variant">
-                Something went wrong resetting your password. Please try again.
+                {failureMessage}
               </Text>
               <Pressable
                 onPress={() => setModalState("none")}

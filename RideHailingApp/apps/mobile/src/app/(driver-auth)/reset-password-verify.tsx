@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import { Keyboard, Pressable, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Keyboard, Pressable, Text, TextInput, View } from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { apiClient, getApiErrorMessage } from "@/lib/api-client";
 import { themeColors } from "@/constants/theme-colors";
+import { passwordResetDraft } from "@/utils/password-reset-draft";
 
 // The missing step between forgot-password.tsx ("Send Code") and reset-password.tsx ("Create New
 // Password") -- there was previously no screen to actually enter the code. No source design exists
@@ -39,6 +41,8 @@ export default function ResetPasswordVerifyScreen() {
   const params = useLocalSearchParams<{ method?: string; value?: string }>();
   const [digits, setDigits] = useState<string[]>(Array(OTP_LENGTH).fill(""));
   const [timeLeft, setTimeLeft] = useState(30);
+  const [otpError, setOtpError] = useState<string | null>(null);
+  const [verifying, setVerifying] = useState(false);
   const inputRefs = useRef<(TextInput | null)[]>([]);
 
   useEffect(() => {
@@ -65,6 +69,44 @@ export default function ResetPasswordVerifyScreen() {
   const handleKeyPress = (index: number, key: string) => {
     if (key === "Backspace" && !digits[index] && index > 0) {
       inputRefs.current[index - 1]?.focus();
+    }
+  };
+
+  // "Verify" now calls the real POST /auth/password-reset/verify -- on success the backend issues
+  // a short-lived reset token (see auth.service.ts's confirmPasswordReset comment for why a token
+  // rather than resending the identifier+code) which reset-password.tsx needs to actually change
+  // the password, so it's stashed on the same module-level draft register.tsx's flow uses.
+  const handleVerify = async () => {
+    const code = digits.join("");
+    if (code.length < OTP_LENGTH) {
+      setOtpError("Enter the full 6-digit code.");
+      return;
+    }
+    setOtpError(null);
+    setVerifying(true);
+    try {
+      const { data } = await apiClient.post<{ resetToken: string }>(
+        "/auth/password-reset/verify",
+        { identifier: passwordResetDraft.identifier, code },
+      );
+      passwordResetDraft.resetToken = data.resetToken;
+      router.push("/(driver-auth)/reset-password");
+    } catch (error) {
+      setOtpError(getApiErrorMessage(error, "That code didn't work. Please try again."));
+    } finally {
+      setVerifying(false);
+    }
+  };
+
+  const handleResend = async () => {
+    setOtpError(null);
+    setTimeLeft(30);
+    try {
+      await apiClient.post("/auth/password-reset/request", {
+        identifier: passwordResetDraft.identifier,
+      });
+    } catch (error) {
+      setOtpError(getApiErrorMessage(error, "Couldn't resend the code. Please try again."));
     }
   };
 
@@ -125,11 +167,22 @@ export default function ResetPasswordVerifyScreen() {
           ))}
         </View>
 
+        {otpError ? (
+          <Text className="mb-stack-md text-center font-label-sm text-label-sm text-error">
+            {otpError}
+          </Text>
+        ) : null}
+
         <Pressable
-          onPress={() => router.push("/(driver-auth)/reset-password")}
-          className="mb-stack-md w-full items-center justify-center rounded-xl bg-primary py-4 shadow-lg active:scale-95"
+          onPress={handleVerify}
+          disabled={verifying}
+          className="mb-stack-md w-full items-center justify-center rounded-xl bg-primary py-4 shadow-lg active:scale-95 disabled:opacity-70"
         >
-          <Text className="font-label-sm text-label-sm text-on-primary">Verify</Text>
+          {verifying ? (
+            <ActivityIndicator color={themeColors.onPrimary} />
+          ) : (
+            <Text className="font-label-sm text-label-sm text-on-primary">Verify</Text>
+          )}
         </Pressable>
 
         <View className="flex-row items-center justify-center">
@@ -140,7 +193,7 @@ export default function ResetPasswordVerifyScreen() {
               the same NativeWind runtime anti-pattern root-caused on login.tsx's phone/email
               toggle. className is now static; the color/underline difference moves to a plain
               `style` prop instead. */}
-          <Pressable disabled={timeLeft > 0} onPress={() => setTimeLeft(30)} className="ml-1">
+          <Pressable disabled={timeLeft > 0} onPress={handleResend} className="ml-1">
             <Text
               className="font-label-sm text-label-sm font-bold"
               style={{

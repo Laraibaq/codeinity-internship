@@ -11,30 +11,39 @@ interface StoredOtp {
 // restart. Fine for this phase since there's no real SMS delivery yet either -- once Twilio (or a
 // local SMS gateway, per Dependencies.docx §4) is wired up, move this to a persisted store so
 // codes survive across instances/restarts.
+//
+// `purpose` namespaces the key (e.g. "signup" vs "password-reset") so a code sent for one flow
+// can't be replayed to satisfy the other -- both flows key by the same phone/email identifier, and
+// without this a code texted for signup verification would also happily verify a password reset
+// on that same identifier.
 @Injectable()
 export class OtpService {
   private readonly codes = new Map<string, StoredOtp>();
 
-  request(phone: string): string {
+  request(purpose: string, identifier: string): string {
     const code = Math.floor(100000 + Math.random() * 900000).toString();
-    this.codes.set(phone, { code, expiresAt: Date.now() + OTP_TTL_MS });
+    this.codes.set(`${purpose}:${identifier}`, {
+      code,
+      expiresAt: Date.now() + OTP_TTL_MS,
+    });
 
-    // TODO: replace with a real SMS send (Twilio or a local gateway) once one is wired up.
-    console.log(`[otp] code for ${phone}: ${code} (expires in 5 min)`);
+    // TODO: replace with a real SMS/email send (Twilio or a local gateway) once one is wired up.
+    console.log(`[otp:${purpose}] code for ${identifier}: ${code} (expires in 5 min)`);
 
     return code;
   }
 
-  verify(phone: string, code: string): boolean {
-    const stored = this.codes.get(phone);
+  verify(purpose: string, identifier: string, code: string): boolean {
+    const key = `${purpose}:${identifier}`;
+    const stored = this.codes.get(key);
     if (!stored) return false;
     if (Date.now() > stored.expiresAt) {
-      this.codes.delete(phone);
+      this.codes.delete(key);
       return false;
     }
     if (stored.code !== code) return false;
 
-    this.codes.delete(phone);
+    this.codes.delete(key);
     return true;
   }
 }

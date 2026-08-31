@@ -58,10 +58,9 @@ import { normalizePhone } from "@/utils/phone";
 //
 // "Login" now calls POST /auth/login for real, stores both tokens, and only then
 // `router.replace`s (not `push`) to dashboard.tsx, so a logged-in driver can't swipe-back into the
-// login screen. TODO: still always routes to dashboard on success regardless of the driver's actual
-// verification status -- should route pending/rejected drivers to verification-status instead once
-// that check exists. Going straight to dashboard remains the right shortcut for now since that's
-// the common case during testing.
+// login screen. Fixed: used to always route straight to dashboard regardless of the driver's
+// actual verification status -- the backend now returns it on login, so pending/rejected drivers
+// land on verification-status.tsx instead.
 //
 // Vertical centering: removed. Content now flows naturally from the top of the screen, directly
 // below the header, rather than being centered or pushed down -- no more flexGrow/justifyContent on
@@ -83,11 +82,26 @@ export default function DriverLoginScreen() {
     try {
       const normalizedIdentifier =
         loginMethod === "phone" ? normalizePhone(identifier) : identifier.trim();
-      const { data } = await apiClient.post<{ accessToken: string; refreshToken: string }>(
-        "/auth/login",
-        { identifier: normalizedIdentifier, password },
-      );
+      const { data } = await apiClient.post<{
+        accessToken: string;
+        refreshToken: string;
+        role: "driver" | "passenger";
+        verificationStatus?: "pending" | "approved" | "rejected";
+      }>("/auth/login", { identifier: normalizedIdentifier, password });
       await storeAuthTokens(data.accessToken, data.refreshToken);
+
+      // A driver account can exist and log in before their documents are reviewed -- only an
+      // `approved` driver goes straight to the dashboard now. `pending`/`rejected` land back on
+      // verification-status.tsx (the same screen the registration flow's last step pushes),
+      // showing that account's actual status instead of assuming every login means "cleared to
+      // drive".
+      if (data.role === "driver" && data.verificationStatus !== "approved") {
+        router.replace({
+          pathname: "/(driver)/verification-status",
+          params: { status: data.verificationStatus ?? "pending" },
+        });
+        return;
+      }
       router.replace("/(driver)/(drawer)/(tabs)/dashboard");
     } catch (error) {
       setLoginError(getApiErrorMessage(error, "Couldn't log you in. Please try again."));

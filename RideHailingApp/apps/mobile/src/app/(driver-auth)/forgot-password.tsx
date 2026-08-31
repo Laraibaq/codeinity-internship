@@ -1,11 +1,14 @@
 import { useState } from "react";
-import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { apiClient, getApiErrorMessage } from "@/lib/api-client";
 import { themeColors } from "@/constants/theme-colors";
 import { LoginMethodToggle, type LoginMethod } from "@/components/login-method-toggle";
+import { passwordResetDraft } from "@/utils/password-reset-draft";
+import { normalizePhone } from "@/utils/phone";
 
 // Restored to the screen's original structure/copy (see git history: commit 2c423f6, "August") after
 // several turns of layout changes had accumulated on top of it. The only two carryovers kept from
@@ -51,6 +54,34 @@ export default function DriverForgotPasswordScreen() {
   const insets = useSafeAreaInsets();
   const [method, setMethod] = useState<LoginMethod>("phone");
   const [value, setValue] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+
+  // "Send Code" now calls the real POST /auth/password-reset/request -- the backend replies the
+  // same way whether or not an account exists for this identifier (see that endpoint's own
+  // comment), so this always proceeds to the code-entry screen rather than branching on a
+  // found/not-found response that would leak account existence.
+  const handleSendCode = async () => {
+    const identifier = method === "phone" ? normalizePhone(value) : value.trim();
+    if (!identifier) {
+      setFormError(method === "phone" ? "Enter a phone number." : "Enter an email address.");
+      return;
+    }
+    setFormError(null);
+    setSubmitting(true);
+    try {
+      await apiClient.post("/auth/password-reset/request", { identifier });
+      passwordResetDraft.identifier = identifier;
+      router.push({
+        pathname: "/(driver-auth)/reset-password-verify",
+        params: { method, value },
+      });
+    } catch (error) {
+      setFormError(getApiErrorMessage(error, "Couldn't send a code. Please try again."));
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   return (
     <View className="flex-1 bg-background">
@@ -129,18 +160,24 @@ export default function DriverForgotPasswordScreen() {
               </View>
             )}
 
-            <Pressable
-              onPress={() =>
-                router.push({
-                  pathname: "/(driver-auth)/reset-password-verify",
-                  params: { method, value },
-                })
-              }
-              className="w-full items-center justify-center rounded-lg bg-primary px-6 py-4 shadow-md active:scale-95"
-            >
-              <Text className="font-label-sm text-label-sm uppercase text-on-primary">
-                Send Code
+            {formError ? (
+              <Text className="text-center font-label-sm text-label-sm text-error">
+                {formError}
               </Text>
+            ) : null}
+
+            <Pressable
+              onPress={handleSendCode}
+              disabled={submitting}
+              className="w-full items-center justify-center rounded-lg bg-primary px-6 py-4 shadow-md active:scale-95 disabled:opacity-70"
+            >
+              {submitting ? (
+                <ActivityIndicator color={themeColors.onPrimary} />
+              ) : (
+                <Text className="font-label-sm text-label-sm uppercase text-on-primary">
+                  Send Code
+                </Text>
+              )}
             </Pressable>
           </View>
         </View>
