@@ -1,9 +1,10 @@
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Image, Pressable, ScrollView, Text, View } from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { themeColors } from "@/constants/theme-colors";
+import { useDocumentUpload } from "@/hooks/use-document-upload";
 
 // Step indicator added (this screen previously had none): Step 6 of 10, its own unique number --
 // previously shared Step 5 with register-license-details.tsx, but that sharing was fixed as a
@@ -25,11 +26,12 @@ import { themeColors } from "@/constants/theme-colors";
 // - `hover:*` / `group-hover:*` / `transition-colors` / `transition-shadow` / `duration-*` dropped
 //   throughout: no hover state on touch devices, no RN equivalent for CSS transitions.
 // - Each upload card is a `<label>` wrapping a hidden `<input type="file">`; rendered as a
-//   Pressable per rule 2. Per this task's rule 5, these are the designated inert upload buttons --
-//   no expo-image-picker wiring, no onPress handler, rendered exactly in their default "Pending"
-//   appearance (the status pill is static, not conditional state).
-// - The two-part status pill (dot + "Pending" label) has no interactivity in the source itself
-//   (nothing ever changes it to a different status) -- rendered as-is, unconditionally.
+//   Pressable per rule 2.
+// - The two-part status pill (dot + "Pending" label): now real state (Phase 2) -- see
+//   LicenseUploadCard below, one instance per side, each its own useDocumentUpload("license_front"
+//   / "license_back"). Pill reads Pending -> Uploading... -> Uploaded as that side's upload
+//   progresses; tapping the card offers Take Photo / Choose from Library, same pattern as
+//   register-identity-document.tsx's single upload box.
 // - This screen's Continue button is `disabled` in the source (bg-surface-container-high,
 //   text-on-surface-variant, cursor-not-allowed) because in the live app it only enables once both
 //   photos are uploaded -- a real-validation concern out of scope for this static UI shell.
@@ -37,6 +39,67 @@ import { themeColors } from "@/constants/theme-colors";
 //   literal disabled-look styling (this screen's default/pending appearance, per rule 5's explicit
 //   instruction not to fake an "uploaded" state), but rendered always-tappable rather than actually
 //   `disabled` so the CTA can still navigate per this task's routing table.
+
+function LicenseUploadCard({
+  title,
+  documentType,
+}: {
+  title: string;
+  documentType: "license_front" | "license_back";
+}) {
+  const { uri, uploading, uploaded, error, pickFromLibrary, pickFromCamera } =
+    useDocumentUpload(documentType);
+
+  const handlePress = () => {
+    Alert.alert(title, "Take a photo or choose one from your library.", [
+      { text: "Take Photo", onPress: () => void pickFromCamera() },
+      { text: "Choose from Library", onPress: () => void pickFromLibrary() },
+      { text: "Cancel", style: "cancel" },
+    ]);
+  };
+
+  const statusLabel = uploading ? "Uploading..." : uploaded ? "Uploaded" : "Pending";
+  const statusColor = uploaded ? themeColors.primary : themeColors.outline;
+
+  return (
+    <View className="gap-1">
+      <Pressable
+        onPress={handlePress}
+        disabled={uploading}
+        className="relative items-center gap-stack-sm rounded-xl border border-outline-variant bg-surface-container-lowest p-stack-md shadow-sm disabled:opacity-70"
+      >
+        <View className="h-16 w-16 items-center justify-center overflow-hidden rounded-full bg-surface-container-low">
+          {uri ? (
+            <Image source={{ uri }} className="h-full w-full" resizeMode="cover" />
+          ) : (
+            <MaterialIcons name="add-photo-alternate" size={30} color={themeColors.primary} />
+          )}
+          {uploading ? (
+            <View
+              className="absolute inset-0 items-center justify-center"
+              style={{ backgroundColor: "rgba(21,28,39,0.4)" }}
+            >
+              <ActivityIndicator color={themeColors.onPrimary} size="small" />
+            </View>
+          ) : null}
+        </View>
+        <View className="items-center">
+          <Text className="font-label-sm text-label-sm text-on-surface">{title}</Text>
+          <Text className="mt-1 font-body-md text-body-md text-on-surface-variant">
+            {uri ? "Tap to retake or replace" : "Tap to upload or take photo"}
+          </Text>
+        </View>
+        <View className="absolute right-4 top-4 flex-row items-center gap-1 rounded-full bg-surface-container-high px-3 py-1">
+          <View className="h-2 w-2 rounded-full" style={{ backgroundColor: statusColor }} />
+          <Text className="font-label-sm text-label-sm text-on-surface-variant">{statusLabel}</Text>
+        </View>
+      </Pressable>
+      {error ? (
+        <Text className="font-label-sm text-label-sm text-error">{error}</Text>
+      ) : null}
+    </View>
+  );
+}
 
 export default function DriverRegisterLicenseUploadScreen() {
   const router = useRouter();
@@ -83,39 +146,8 @@ export default function DriverRegisterLicenseUploadScreen() {
         </View>
 
         <View className="gap-stack-md">
-          <Pressable className="relative items-center gap-stack-sm rounded-xl border border-outline-variant bg-surface-container-lowest p-stack-md shadow-sm">
-            <View className="h-16 w-16 items-center justify-center rounded-full bg-surface-container-low">
-              <MaterialIcons name="add-photo-alternate" size={30} color={themeColors.primary} />
-            </View>
-            <View className="items-center">
-              <Text className="font-label-sm text-label-sm text-on-surface">
-                Front of License
-              </Text>
-              <Text className="mt-1 font-body-md text-body-md text-on-surface-variant">
-                Tap to upload or take photo
-              </Text>
-            </View>
-            <View className="absolute right-4 top-4 flex-row items-center gap-1 rounded-full bg-surface-container-high px-3 py-1">
-              <View className="h-2 w-2 rounded-full bg-outline" />
-              <Text className="font-label-sm text-label-sm text-on-surface-variant">Pending</Text>
-            </View>
-          </Pressable>
-
-          <Pressable className="relative items-center gap-stack-sm rounded-xl border border-outline-variant bg-surface-container-lowest p-stack-md shadow-sm">
-            <View className="h-16 w-16 items-center justify-center rounded-full bg-surface-container-low">
-              <MaterialIcons name="add-photo-alternate" size={30} color={themeColors.primary} />
-            </View>
-            <View className="items-center">
-              <Text className="font-label-sm text-label-sm text-on-surface">Back of License</Text>
-              <Text className="mt-1 font-body-md text-body-md text-on-surface-variant">
-                Tap to upload or take photo
-              </Text>
-            </View>
-            <View className="absolute right-4 top-4 flex-row items-center gap-1 rounded-full bg-surface-container-high px-3 py-1">
-              <View className="h-2 w-2 rounded-full bg-outline" />
-              <Text className="font-label-sm text-label-sm text-on-surface-variant">Pending</Text>
-            </View>
-          </Pressable>
+          <LicenseUploadCard title="Front of License" documentType="license_front" />
+          <LicenseUploadCard title="Back of License" documentType="license_back" />
         </View>
       </ScrollView>
 

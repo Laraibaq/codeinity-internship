@@ -1,10 +1,11 @@
 import { useState } from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Image, Pressable, ScrollView, Text, View } from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { themeColors } from "@/constants/theme-colors";
+import { useDocumentUpload } from "@/hooks/use-document-upload";
 
 type IdType = "passport" | "national_id";
 
@@ -74,9 +75,13 @@ type IdType = "passport" | "national_id";
 // - The upload area's surrounding HTML comment claims it's "conceptual, appears after selection,"
 //   but no script in this file actually conditions its visibility on the radio selection --
 //   rendered unconditionally visible per the literal markup, per rule 4 (flagging the apparent
-//   intent/implementation mismatch rather than adding the conditional behavior myself). Per this
-//   task's rule 5, this upload area is one of the designated inert upload buttons: non-functional
-//   Pressable, no expo-image-picker wiring, default appearance only.
+//   intent/implementation mismatch rather than adding the conditional behavior myself).
+//
+// Upload area now wired for real (Phase 2): tapping it offers Take Photo / Choose from Library
+// (an Alert action sheet, since the box's own label already promises both in one tap target),
+// then POSTs to /drivers/me/documents as documentType "identity_document" via the shared
+// useDocumentUpload hook. Shows the picked image as a thumbnail, a spinner while uploading, and a
+// checkmark badge once confirmed; an inline error below the box on failure.
 
 const idOptions: {
   value: IdType;
@@ -92,6 +97,16 @@ export default function DriverRegisterIdentityDocumentScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [idType, setIdType] = useState<IdType | null>(null);
+  const { uri, uploading, uploaded, error, pickFromLibrary, pickFromCamera } =
+    useDocumentUpload("identity_document");
+
+  const handleUploadPress = () => {
+    Alert.alert("Identity Document", "Take a photo or choose one from your library.", [
+      { text: "Take Photo", onPress: () => void pickFromCamera() },
+      { text: "Choose from Library", onPress: () => void pickFromLibrary() },
+      { text: "Cancel", style: "cancel" },
+    ]);
+  };
 
   return (
     <View className="flex-1 bg-surface">
@@ -191,17 +206,43 @@ export default function DriverRegisterIdentityDocumentScreen() {
             );
           })}
 
-          <Pressable className="mt-stack-md items-center rounded-xl border border-dashed border-outline-variant bg-surface-container p-stack-lg">
-            <View className="mb-stack-sm h-16 w-16 items-center justify-center rounded-full bg-secondary-container">
-              <MaterialIcons name="photo-camera" size={32} color={themeColors.onSecondaryContainer} />
-            </View>
+          <Pressable
+            onPress={handleUploadPress}
+            disabled={uploading}
+            className="mt-stack-md items-center rounded-xl border border-dashed border-outline-variant bg-surface-container p-stack-lg disabled:opacity-70"
+          >
+            {uri ? (
+              <View className="relative mb-stack-sm h-16 w-16 overflow-hidden rounded-full">
+                <Image source={{ uri }} className="h-full w-full" resizeMode="cover" />
+                {uploading ? (
+                  <View
+                    className="absolute inset-0 items-center justify-center"
+                    style={{ backgroundColor: "rgba(21,28,39,0.4)" }}
+                  >
+                    <ActivityIndicator color={themeColors.onPrimary} size="small" />
+                  </View>
+                ) : null}
+                {uploaded ? (
+                  <View className="absolute bottom-0 right-0 rounded-full bg-primary p-0.5">
+                    <MaterialIcons name="check" size={12} color={themeColors.onPrimary} />
+                  </View>
+                ) : null}
+              </View>
+            ) : (
+              <View className="mb-stack-sm h-16 w-16 items-center justify-center rounded-full bg-secondary-container">
+                <MaterialIcons name="photo-camera" size={32} color={themeColors.onSecondaryContainer} />
+              </View>
+            )}
             <Text className="text-center font-body-md text-body-md font-semibold text-primary">
-              Tap to take photo or upload
+              {uri ? "Tap to retake or replace" : "Tap to take photo or upload"}
             </Text>
             <Text className="mt-1 text-center font-label-sm text-label-sm font-normal text-on-surface-variant">
               Make sure all corners are visible and text is clear.
             </Text>
           </Pressable>
+          {error ? (
+            <Text className="mt-2 text-center font-label-sm text-label-sm text-error">{error}</Text>
+          ) : null}
         </View>
 
         <View className="mt-auto pt-stack-lg pb-stack-md">

@@ -1,9 +1,10 @@
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, Image, Pressable, ScrollView, Text, View } from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { themeColors } from "@/constants/theme-colors";
+import { useDocumentUpload } from "@/hooks/use-document-upload";
 
 // Flow reorder: Continue now goes to register-identity-document.tsx (was
 // register-license-details.tsx) -- Identity Document moved earlier in the registration sequence,
@@ -43,6 +44,8 @@ import { themeColors } from "@/constants/theme-colors";
 export default function DriverRegisterProfilePhotoScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { uri, uploading, uploaded, error, pickFromLibrary, pickFromCamera } =
+    useDocumentUpload("profile_photo");
 
   return (
     <View className="flex-1 bg-background">
@@ -90,19 +93,38 @@ export default function DriverRegisterProfilePhotoScreen() {
 
         <View className="relative mb-stack-lg">
           <View className="relative h-48 w-48 items-center justify-center overflow-hidden rounded-full border-4 border-surface bg-surface-container-high shadow-lg">
-            <MaterialIcons name="person" size={60} color={themeColors.outlineVariant} />
-            <View
-              className="absolute inset-0 items-center justify-center"
-              style={{ backgroundColor: "rgba(21,28,39,0.4)", opacity: 0 }}
-              pointerEvents="none"
-            >
-              <MaterialIcons name="edit" size={30} color={themeColors.onPrimary} />
-            </View>
+            {uri ? (
+              <Image source={{ uri }} className="h-full w-full" resizeMode="cover" />
+            ) : (
+              <MaterialIcons name="person" size={60} color={themeColors.outlineVariant} />
+            )}
+            {uploading ? (
+              <View
+                className="absolute inset-0 items-center justify-center"
+                style={{ backgroundColor: "rgba(21,28,39,0.4)" }}
+              >
+                <ActivityIndicator color={themeColors.onPrimary} />
+              </View>
+            ) : null}
+            {uploaded ? (
+              <View className="absolute bottom-1 right-1 rounded-full bg-primary p-1">
+                <MaterialIcons name="check" size={16} color={themeColors.onPrimary} />
+              </View>
+            ) : null}
           </View>
-          <Pressable className="absolute bottom-2 right-2 items-center justify-center rounded-full bg-primary p-3 shadow-md active:scale-95">
+          <Pressable
+            onPress={pickFromCamera}
+            className="absolute bottom-2 right-2 items-center justify-center rounded-full bg-primary p-3 shadow-md active:scale-95"
+          >
             <MaterialIcons name="photo-camera" size={20} color={themeColors.onPrimary} />
           </Pressable>
         </View>
+
+        {error ? (
+          <Text className="mb-stack-md text-center font-label-sm text-label-sm text-error">
+            {error}
+          </Text>
+        ) : null}
 
         <View className="mb-stack-lg w-full rounded-xl border border-surface-variant bg-surface-container-lowest p-6 shadow-sm">
           <Text className="mb-4 font-label-sm text-label-sm uppercase tracking-wider text-on-surface">
@@ -146,14 +168,20 @@ export default function DriverRegisterProfilePhotoScreen() {
         </View>
 
         <View className="w-full flex-col gap-4">
-          <Pressable className="min-h-[56px] flex-1 flex-row items-center justify-center gap-2 rounded-lg bg-surface-container-high px-6 py-4 active:scale-95">
+          <Pressable
+            onPress={pickFromLibrary}
+            disabled={uploading}
+            className="min-h-[56px] flex-1 flex-row items-center justify-center gap-2 rounded-lg bg-surface-container-high px-6 py-4 active:scale-95 disabled:opacity-70"
+          >
             <MaterialIcons name="image" size={16} color={themeColors.onSurface} />
             <Text className="font-body-md text-body-md font-semibold text-on-surface">
               Upload Photo
             </Text>
           </Pressable>
           <Pressable
-            className="min-h-[56px] flex-1 flex-row items-center justify-center gap-2 rounded-lg bg-primary px-6 py-4 active:scale-95"
+            onPress={pickFromCamera}
+            disabled={uploading}
+            className="min-h-[56px] flex-1 flex-row items-center justify-center gap-2 rounded-lg bg-primary px-6 py-4 active:scale-95 disabled:opacity-70"
             style={{
               shadowColor: "#000000",
               shadowOffset: { width: 0, height: 4 },
