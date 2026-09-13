@@ -108,7 +108,7 @@ export default function NavigateToPickupScreen() {
           driverLocation={driverLocation}
           pickup={pickupPoint}
           showsRoutePolyline={true}
-          style={StyleSheet.absoluteFillObject}
+          style={StyleSheet.absoluteFill}
         />
 
         <View

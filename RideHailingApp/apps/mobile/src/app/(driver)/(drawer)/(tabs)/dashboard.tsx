@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { LayoutAnimation, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
-import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import { BlurView } from "expo-blur";
-import { DrawerActions, useFocusEffect } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -298,7 +297,7 @@ export default function DriverDashboardScreen() {
   useFocusEffect(
     useCallback(() => {
       if (consumeDrawerOpenRequest()) {
-        navigation.dispatch(DrawerActions.openDrawer());
+        navigation.dispatch({ type: "OPEN_DRAWER" });
       }
     }, [navigation]),
   );
@@ -366,7 +365,7 @@ export default function DriverDashboardScreen() {
           <NativeMap
             driverLocation={driverLocation}
             showsRoutePolyline={false}
-            style={StyleSheet.absoluteFillObject}
+            style={StyleSheet.absoluteFill}
           />
           <View style={{ paddingTop: 20 + insets.top }} className="px-container-margin z-10">
             <View className="flex-row items-center justify-between rounded-full border border-outline-variant/20 bg-surface p-2 shadow-lg">
@@ -531,7 +530,7 @@ export default function DriverDashboardScreen() {
           <NativeMap
             driverLocation={driverLocation}
             showsRoutePolyline={false}
-            style={StyleSheet.absoluteFillObject}
+            style={StyleSheet.absoluteFill}
           />
           <BlurView
             intensity={20}

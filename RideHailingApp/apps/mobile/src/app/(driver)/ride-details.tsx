@@ -174,7 +174,7 @@ export default function RideDetailsScreen() {
             pickup={pickupPoint}
             dropoff={dropoffPoint}
             showsRoutePolyline={true}
-            style={StyleSheet.absoluteFillObject}
+            style={StyleSheet.absoluteFill}
           />
           <LinearGradient
             colors={["transparent", themeColors.surface]}
