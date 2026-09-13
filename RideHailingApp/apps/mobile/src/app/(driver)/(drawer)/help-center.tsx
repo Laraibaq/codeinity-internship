@@ -1,19 +1,30 @@
 import { useState } from "react";
-import { Linking, Pressable, ScrollView, Text, View } from "react-native";
+import {
+  ActivityIndicator,
+  Alert,
+  Linking,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { themeColors } from "@/constants/theme-colors";
-
-// New screen: Settings' "Help Center" row previously had no destination at all (a bare, unwired
-// Pressable, same as Privacy Policy / Terms of Service). This gives it a real destination: an FAQ
-// list plus a working "Email Support" action that opens the device's mail app via `Linking` --
-// the one piece of this screen that needs no backend to actually work.
+import {
+  useDriverSupportTickets,
+  useSubmitSupportTicket,
+  useSupportFaqs,
+  type CreateSupportTicketPayload,
+} from "@/hooks/use-driver-support";
 
 const SUPPORT_EMAIL = "support@ridehailingapp.example";
 
-const FAQS = [
+const FALLBACK_FAQS = [
   {
     question: "How do I get paid?",
     answer:
@@ -36,12 +47,21 @@ const FAQS = [
   },
 ];
 
+const CATEGORIES: { label: string; value: CreateSupportTicketPayload["category"] }[] = [
+  { label: "Ride Issue", value: "ride" },
+  { label: "Account", value: "account" },
+  { label: "Vehicle & Docs", value: "vehicle_document" },
+  { label: "Technical", value: "technical" },
+  { label: "Safety", value: "safety" },
+  { label: "Other", value: "other" },
+];
+
 function FaqItem({ question, answer }: { question: string; answer: string }) {
   const [open, setOpen] = useState(false);
   return (
     <Pressable
       onPress={() => setOpen((prev) => !prev)}
-      className="gap-2 rounded-xl border border-outline-variant/30 bg-white p-stack-md shadow-sm"
+      className="gap-2 rounded-xl border border-outline-variant/30 bg-white p-stack-md shadow-sm active:scale-[0.99]"
     >
       <View className="flex-row items-center justify-between">
         <Text className="flex-1 font-body-md text-body-md font-semibold text-on-surface">
@@ -54,7 +74,9 @@ function FaqItem({ question, answer }: { question: string; answer: string }) {
         />
       </View>
       {open ? (
-        <Text className="font-body-md text-body-md text-on-surface-variant">{answer}</Text>
+        <Text className="font-body-md text-body-md leading-relaxed text-on-surface-variant">
+          {answer}
+        </Text>
       ) : null}
     </Pressable>
   );
@@ -63,9 +85,67 @@ function FaqItem({ question, answer }: { question: string; answer: string }) {
 export default function HelpCenterScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { rideId } = useLocalSearchParams<{ rideId?: string }>();
+
+  const { data: remoteFaqs, isRefetching: isFaqRefetching, refetch: refetchFaqs } = useSupportFaqs();
+  const {
+    data: tickets,
+    isRefetching: isTicketsRefetching,
+    refetch: refetchTickets,
+  } = useDriverSupportTickets();
+  const submitTicket = useSubmitSupportTicket();
+
+  const [showForm, setShowForm] = useState(!!rideId);
+  const [category, setCategory] = useState<CreateSupportTicketPayload["category"]>(
+    rideId ? "ride" : "ride",
+  );
+  const [subject, setSubject] = useState(rideId ? `Trip Issue (#${rideId.slice(0, 8)})` : "");
+  const [description, setDescription] = useState("");
+  const [successBanner, setSuccessBanner] = useState(false);
+
+  const faqs = remoteFaqs && remoteFaqs.length > 0 ? remoteFaqs : FALLBACK_FAQS;
 
   const handleEmailSupport = () => {
-    Linking.openURL(`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent("Driver support request")}`);
+    Linking.openURL(
+      `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent("Driver support request")}`,
+    );
+  };
+
+  const handleSubmitTicket = () => {
+    if (!subject.trim()) {
+      Alert.alert("Required", "Please enter a subject for your ticket.");
+      return;
+    }
+    if (!description.trim()) {
+      Alert.alert("Required", "Please describe your issue.");
+      return;
+    }
+
+    submitTicket.mutate(
+      {
+        category,
+        subject: subject.trim(),
+        description: description.trim(),
+        rideId: rideId ? String(rideId) : undefined,
+      },
+      {
+        onSuccess: () => {
+          setSuccessBanner(true);
+          setShowForm(false);
+          setSubject("");
+          setDescription("");
+        },
+        onError: (err: any) => {
+          const msg = err?.response?.data?.message || "Failed to submit ticket. Please try again.";
+          Alert.alert("Submission Error", msg);
+        },
+      },
+    );
+  };
+
+  const handleRefresh = () => {
+    refetchFaqs();
+    refetchTickets();
   };
 
   return (
@@ -88,7 +168,205 @@ export default function HelpCenterScreen() {
       <ScrollView
         className="flex-1"
         contentContainerClassName="mx-auto w-full max-w-4xl gap-stack-md px-container-margin py-stack-md pb-32"
+        refreshControl={
+          <RefreshControl
+            refreshing={isFaqRefetching || isTicketsRefetching}
+            onRefresh={handleRefresh}
+            tintColor={themeColors.primary}
+          />
+        }
       >
+        {rideId ? (
+          <View className="flex-row items-center justify-between rounded-xl border border-primary/30 bg-primary/10 p-stack-md">
+            <View className="flex-1">
+              <Text className="font-label-sm text-label-sm font-bold text-primary">
+                Help for Trip #{rideId.slice(0, 8)}
+              </Text>
+              <Text className="font-body-md text-body-md text-on-surface-variant">
+                Need to report an issue or dispute a fare for this trip?
+              </Text>
+            </View>
+            {!showForm ? (
+              <Pressable
+                onPress={() => setShowForm(true)}
+                className="rounded-lg bg-primary px-3.5 py-2 active:scale-95"
+              >
+                <Text className="font-label-sm text-xs font-semibold text-on-primary">Open Form</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        ) : null}
+
+        {successBanner ? (
+          <View className="flex-row items-center gap-3 rounded-xl border border-primary/40 bg-primaryFixed/30 p-stack-md">
+            <MaterialIcons name="check-circle" size={24} color={themeColors.primary} />
+            <View className="flex-1">
+              <Text className="font-body-md text-body-md font-semibold text-primary">
+                Ticket submitted successfully!
+              </Text>
+              <Text className="font-label-sm text-label-sm text-on-surface-variant">
+                Our support team has received your ticket and will follow up shortly.
+              </Text>
+            </View>
+            <Pressable onPress={() => setSuccessBanner(false)} hitSlop={8}>
+              <MaterialIcons name="close" size={20} color={themeColors.onSurfaceVariant} />
+            </Pressable>
+          </View>
+        ) : null}
+
+        {/* Ticket Submission Card */}
+        <View className="rounded-xl border border-outline-variant/30 bg-white p-stack-md shadow-sm">
+          <Pressable
+            onPress={() => setShowForm((prev) => !prev)}
+            className="flex-row items-center justify-between"
+          >
+            <View className="flex-row items-center gap-3">
+              <View className="h-10 w-10 items-center justify-center rounded-full bg-surface-container">
+                <MaterialIcons name="support-agent" size={22} color={themeColors.primary} />
+              </View>
+              <View>
+                <Text className="font-body-md text-body-md font-semibold text-on-surface">
+                  Submit Support Ticket
+                </Text>
+                <Text className="font-label-sm text-label-sm text-on-surface-variant">
+                  {showForm ? "Hide ticket form" : "Report an issue or dispute to support"}
+                </Text>
+              </View>
+            </View>
+            <MaterialIcons
+              name={showForm ? "expand-less" : "expand-more"}
+              size={22}
+              color={themeColors.onSurfaceVariant}
+            />
+          </Pressable>
+
+          {showForm ? (
+            <View className="mt-4 gap-3 border-t border-outline-variant/20 pt-4">
+              <Text className="font-label-sm text-label-sm font-semibold text-on-surface">
+                Category
+              </Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} className="gap-2">
+                {CATEGORIES.map((cat) => {
+                  const isSelected = category === cat.value;
+                  return (
+                    <Pressable
+                      key={cat.value}
+                      onPress={() => setCategory(cat.value)}
+                      className="mr-2 rounded-full border px-3 py-1.5"
+                      style={{
+                        borderColor: isSelected ? themeColors.primary : themeColors.outlineVariant,
+                        backgroundColor: isSelected
+                          ? themeColors.primaryFixed
+                          : themeColors.surfaceContainerLowest,
+                      }}
+                    >
+                      <Text
+                        className="font-label-sm text-xs font-semibold"
+                        style={{
+                          color: isSelected ? themeColors.primary : themeColors.onSurfaceVariant,
+                        }}
+                      >
+                        {cat.label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+
+              <Text className="mt-1 font-label-sm text-label-sm font-semibold text-on-surface">
+                Subject
+              </Text>
+              <TextInput
+                className="rounded-lg border border-outline-variant bg-surface-container-lowest px-3.5 py-2.5 font-body-md text-body-md text-on-surface"
+                value={subject}
+                onChangeText={setSubject}
+                placeholder="Brief summary of the issue..."
+                placeholderTextColor={themeColors.outline}
+              />
+
+              <Text className="mt-1 font-label-sm text-label-sm font-semibold text-on-surface">
+                Description
+              </Text>
+              <TextInput
+                className="min-h-[90px] rounded-lg border border-outline-variant bg-surface-container-lowest px-3.5 py-2.5 font-body-md text-body-md text-on-surface"
+                value={description}
+                onChangeText={setDescription}
+                placeholder="Explain what happened in detail..."
+                placeholderTextColor={themeColors.outline}
+                multiline
+                numberOfLines={3}
+                textAlignVertical="top"
+              />
+
+              <Pressable
+                onPress={handleSubmitTicket}
+                disabled={submitTicket.isPending}
+                className="mt-2 h-12 items-center justify-center rounded-xl bg-primary shadow-sm active:scale-[0.98]"
+              >
+                {submitTicket.isPending ? (
+                  <ActivityIndicator size="small" color={themeColors.onPrimary} />
+                ) : (
+                  <Text className="font-label-sm text-label-sm font-semibold text-on-primary">
+                    Send Ticket
+                  </Text>
+                )}
+              </Pressable>
+            </View>
+          ) : null}
+        </View>
+
+        {/* Existing tickets list */}
+        {tickets && tickets.length > 0 ? (
+          <View className="gap-stack-sm">
+            <Text className="font-label-sm text-label-sm uppercase tracking-wider text-on-surface-variant">
+              My Support Tickets
+            </Text>
+            {tickets.map((t) => (
+              <View
+                key={t.id}
+                className="gap-2 rounded-xl border border-outline-variant/30 bg-white p-stack-md shadow-sm"
+              >
+                <View className="flex-row items-center justify-between">
+                  <Text className="flex-1 font-body-md text-body-md font-semibold text-on-surface">
+                    {t.subject}
+                  </Text>
+                  <View
+                    className="rounded-full px-2.5 py-0.5"
+                    style={{
+                      backgroundColor:
+                        t.status === "resolved"
+                          ? `${themeColors.primaryFixed}66`
+                          : `${themeColors.secondaryFixed}66`,
+                    }}
+                  >
+                    <Text
+                      className="font-label-sm text-[10px] font-bold uppercase"
+                      style={{
+                        color:
+                          t.status === "resolved" ? themeColors.primary : themeColors.secondary,
+                      }}
+                    >
+                      {t.status}
+                    </Text>
+                  </View>
+                </View>
+                <Text className="font-body-md text-xs text-on-surface-variant" numberOfLines={2}>
+                  {t.description}
+                </Text>
+                <View className="flex-row items-center justify-between pt-1">
+                  <Text className="font-label-sm text-[11px] text-on-surface-variant">
+                    Category: {t.category}
+                  </Text>
+                  <Text className="font-label-sm text-[11px] text-on-surface-variant">
+                    {new Date(t.createdAt).toLocaleDateString()}
+                  </Text>
+                </View>
+              </View>
+            ))}
+          </View>
+        ) : null}
+
+        {/* Email Support Contact Card */}
         <Pressable
           onPress={handleEmailSupport}
           className="flex-row items-center gap-4 rounded-xl border border-outline-variant/30 bg-white p-stack-md shadow-sm active:scale-[0.98]"
@@ -98,7 +376,7 @@ export default function HelpCenterScreen() {
           </View>
           <View className="flex-1">
             <Text className="font-body-md text-body-md font-semibold text-on-surface">
-              Email Support
+              Email Support Directly
             </Text>
             <Text className="font-label-sm text-label-sm text-on-surface-variant">
               {SUPPORT_EMAIL}
@@ -107,11 +385,12 @@ export default function HelpCenterScreen() {
           <MaterialIcons name="open-in-new" size={20} color={themeColors.outline} />
         </Pressable>
 
+        {/* FAQs */}
         <View className="gap-stack-sm">
           <Text className="font-label-sm text-label-sm uppercase tracking-wider text-on-surface-variant">
             Frequently Asked Questions
           </Text>
-          {FAQS.map((faq) => (
+          {faqs.map((faq) => (
             <FaqItem key={faq.question} question={faq.question} answer={faq.answer} />
           ))}
         </View>

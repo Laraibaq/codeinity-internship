@@ -1,34 +1,23 @@
-import { ScrollView, Text, View, Pressable } from "react-native";
+import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { themeColors } from "@/constants/theme-colors";
+import { useDriverRatings } from "@/hooks/use-driver-ratings";
 
-// New screen: the Account tab's "Ratings & Reviews" row previously had no destination at all (a
-// bare, unwired Pressable). No backend exposes real ratings yet (Ratings entity per
-// Dependencies.docx SS5), so this uses representative mock data, same "frontend-only, functional
-// UI" pattern as the rest of this project's un-backed screens.
-
-const RATING_BREAKDOWN = [
-  { stars: 5, count: 84 },
-  { stars: 4, count: 21 },
-  { stars: 3, count: 6 },
-  { stars: 2, count: 2 },
-  { stars: 1, count: 1 },
-];
-
-const TOTAL_RATINGS = RATING_BREAKDOWN.reduce((sum, r) => sum + r.count, 0);
-const AVERAGE_RATING =
-  RATING_BREAKDOWN.reduce((sum, r) => sum + r.stars * r.count, 0) / TOTAL_RATINGS;
-
-const REVIEWS = [
-  { name: "Sarah K.", stars: 5, comment: "Very smooth ride, arrived early. Great driver!", date: "2 days ago" },
-  { name: "Ahmed R.", stars: 5, comment: "Clean car and friendly conversation.", date: "5 days ago" },
-  { name: "Priya M.", stars: 4, comment: "Good ride overall, took a slightly longer route.", date: "1 week ago" },
-  { name: "James O.", stars: 5, comment: "On time and very professional.", date: "1 week ago" },
-  { name: "Fatima A.", stars: 3, comment: "Car was a bit dusty inside.", date: "2 weeks ago" },
-];
+function formatReviewDate(dateString?: string): string {
+  if (!dateString) return "Recent";
+  try {
+    const d = new Date(dateString);
+    return d.toLocaleDateString(undefined, {
+      month: "short",
+      day: "numeric",
+    });
+  } catch {
+    return dateString;
+  }
+}
 
 function StarRow({ count, size = 14 }: { count: number; size?: number }) {
   return (
@@ -48,6 +37,18 @@ function StarRow({ count, size = 14 }: { count: number; size?: number }) {
 export default function RatingsReviewsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { data, isLoading, isError, refetch } = useDriverRatings();
+
+  const averageRating = data?.averageRating ?? 5.0;
+  const totalRatings = data?.totalRatings ?? 0;
+  const starBreakdown = data?.starBreakdown ?? [
+    { stars: 5, count: 0 },
+    { stars: 4, count: 0 },
+    { stars: 3, count: 0 },
+    { stars: 2, count: 0 },
+    { stars: 1, count: 0 },
+  ];
+  const reviews = data?.reviews ?? [];
 
   return (
     <View className="flex-1 bg-background">
@@ -70,59 +71,104 @@ export default function RatingsReviewsScreen() {
         className="flex-1"
         contentContainerClassName="mx-auto w-full max-w-4xl gap-stack-md px-container-margin py-stack-md pb-32"
       >
-        <View className="flex-row items-center gap-stack-md rounded-xl border border-outline-variant/30 bg-white p-stack-md shadow-sm">
-          <View className="items-center">
-            <Text className="font-display-lg text-[40px] text-on-surface">
-              {AVERAGE_RATING.toFixed(1)}
-            </Text>
-            <StarRow count={Math.round(AVERAGE_RATING)} size={16} />
-            <Text className="mt-1 font-label-sm text-label-sm text-on-surface-variant">
-              {TOTAL_RATINGS} ratings
+        {isLoading ? (
+          <View className="items-center justify-center py-16">
+            <ActivityIndicator size="large" color={themeColors.primary} />
+            <Text className="mt-3 font-label-sm text-label-sm text-secondary">
+              Loading ratings &amp; reviews...
             </Text>
           </View>
-
-          <View className="flex-1 gap-1">
-            {RATING_BREAKDOWN.map((row) => (
-              <View key={row.stars} className="flex-row items-center gap-2">
-                <Text className="w-3 font-label-sm text-[11px] text-on-surface-variant">
-                  {row.stars}
-                </Text>
-                <View className="h-2 flex-1 overflow-hidden rounded-full bg-surface-container-highest">
-                  <View
-                    className="h-full rounded-full bg-primary"
-                    style={{ width: `${(row.count / TOTAL_RATINGS) * 100}%` }}
-                  />
-                </View>
-              </View>
-            ))}
-          </View>
-        </View>
-
-        <View className="gap-stack-sm">
-          <Text className="font-label-sm text-label-sm uppercase tracking-wider text-on-surface-variant">
-            Recent Reviews
-          </Text>
-          {REVIEWS.map((review) => (
-            <View
-              key={`${review.name}-${review.date}`}
-              className="gap-2 rounded-xl border border-outline-variant/30 bg-white p-stack-md shadow-sm"
+        ) : isError ? (
+          <View className="items-center justify-center rounded-xl border border-outline-variant bg-surface p-6">
+            <MaterialIcons name="error-outline" size={36} color={themeColors.secondary} />
+            <Text className="mt-2 font-body-md text-body-md font-bold text-on-surface">
+              Failed to load reviews
+            </Text>
+            <Pressable
+              onPress={() => refetch()}
+              className="mt-4 rounded-full bg-primary px-5 py-2 active:scale-95"
             >
-              <View className="flex-row items-center justify-between">
-                <Text className="font-body-md text-body-md font-semibold text-on-surface">
-                  {review.name}
+              <Text className="font-label-sm text-label-sm font-bold text-on-primary">
+                Retry
+              </Text>
+            </Pressable>
+          </View>
+        ) : (
+          <>
+            <View className="flex-row items-center gap-stack-md rounded-xl border border-outline-variant/30 bg-white p-stack-md shadow-sm">
+              <View className="items-center">
+                <Text className="font-display-lg text-[40px] text-on-surface">
+                  {averageRating.toFixed(1)}
                 </Text>
-                <Text className="font-label-sm text-[11px] text-on-surface-variant">
-                  {review.date}
+                <StarRow count={Math.round(averageRating)} size={16} />
+                <Text className="mt-1 font-label-sm text-label-sm text-on-surface-variant">
+                  {totalRatings} {totalRatings === 1 ? "rating" : "ratings"}
                 </Text>
               </View>
-              <StarRow count={review.stars} />
-              <Text className="font-body-md text-body-md text-on-surface-variant">
-                {review.comment}
-              </Text>
+
+              <View className="flex-1 gap-1">
+                {starBreakdown.map((row) => {
+                  const pct = totalRatings > 0 ? (row.count / totalRatings) * 100 : 0;
+                  return (
+                    <View key={row.stars} className="flex-row items-center gap-2">
+                      <Text className="w-3 font-label-sm text-[11px] text-on-surface-variant">
+                        {row.stars}
+                      </Text>
+                      <View className="h-2 flex-1 overflow-hidden rounded-full bg-surface-container-highest">
+                        <View
+                          className="h-full rounded-full bg-primary"
+                          style={{ width: `${pct}%` }}
+                        />
+                      </View>
+                    </View>
+                  );
+                })}
+              </View>
             </View>
-          ))}
-        </View>
+
+            <View className="gap-stack-sm">
+              <Text className="font-label-sm text-label-sm uppercase tracking-wider text-on-surface-variant">
+                Recent Reviews
+              </Text>
+
+              {reviews.length === 0 ? (
+                <View className="items-center justify-center rounded-xl border border-outline-variant/30 bg-white p-8">
+                  <MaterialIcons name="star-outline" size={32} color={themeColors.secondary} />
+                  <Text className="mt-2 font-body-md text-body-md font-bold text-on-surface">
+                    No reviews yet
+                  </Text>
+                  <Text className="mt-1 text-center font-label-sm text-label-sm text-secondary">
+                    Passenger feedback on completed rides will show up here.
+                  </Text>
+                </View>
+              ) : (
+                reviews.map((review) => (
+                  <View
+                    key={review.id}
+                    className="gap-2 rounded-xl border border-outline-variant/30 bg-white p-stack-md shadow-sm"
+                  >
+                    <View className="flex-row items-center justify-between">
+                      <Text className="font-body-md text-body-md font-semibold text-on-surface">
+                        {review.name}
+                      </Text>
+                      <Text className="font-label-sm text-[11px] text-on-surface-variant">
+                        {formatReviewDate(review.createdAt)}
+                      </Text>
+                    </View>
+                    <StarRow count={review.stars} />
+                    {review.comment ? (
+                      <Text className="font-body-md text-body-md text-on-surface-variant">
+                        {review.comment}
+                      </Text>
+                    ) : null}
+                  </View>
+                ))
+              )}
+            </View>
+          </>
+        )}
       </ScrollView>
     </View>
   );
 }
+

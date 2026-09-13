@@ -1,10 +1,12 @@
-import { Image, Pressable, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, Image, Pressable, ScrollView, Text, View } from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { themeColors } from "@/constants/theme-colors";
 import { useOpenDrawer } from "@/hooks/use-open-drawer";
+import { useDriverProfile } from "@/hooks/use-driver-profile";
+import { useDriverNotifications } from "@/hooks/use-notifications";
 
 // Rule 3 substitutions used on this screen:
 // - Icon-ligature -> MaterialIcons substitution as on every screen in this project; every icon
@@ -57,6 +59,21 @@ export default function DriverAccountScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const openDrawer = useOpenDrawer();
+  const { data: profile, isLoading, isError, refetch } = useDriverProfile();
+  const { data: notificationsData } = useDriverNotifications();
+  const unreadCount = notificationsData?.unreadCount ?? 0;
+
+  const photoUri =
+    profile?.profilePhotoUrl ||
+    "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400";
+  const displayName = profile?.name || (isLoading ? "Loading..." : "Driver");
+  const ratingText = profile?.rating != null ? profile.rating.toFixed(1) : "5.0";
+  const verificationLabel =
+    profile?.verificationStatus === "approved"
+      ? "Verified Driver"
+      : profile?.verificationStatus === "rejected"
+        ? "Action Needed"
+        : "Pending Approval";
 
   return (
     <View className="flex-1 bg-background">
@@ -73,9 +90,12 @@ export default function DriverAccountScreen() {
           </Text>
           <Pressable
             onPress={() => router.push("/(driver)/(drawer)/notifications")}
-            className="items-center justify-center rounded-full p-2 active:scale-95"
+            className="relative items-center justify-center rounded-full p-2 active:scale-95"
           >
             <MaterialIcons name="notifications" size={24} color={themeColors.primary} />
+            {unreadCount > 0 ? (
+              <View className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-error" />
+            ) : null}
           </Pressable>
         </View>
       </View>
@@ -84,23 +104,44 @@ export default function DriverAccountScreen() {
         className="flex-1"
         contentContainerClassName="mx-auto w-full max-w-md gap-stack-md px-container-margin py-stack-md pb-32 md:max-w-3xl"
       >
+        {isError ? (
+          <View className="flex-row items-center justify-between rounded-xl border border-error bg-error-container/20 p-4">
+            <Text className="flex-1 font-body-md text-sm text-error">
+              Unable to load profile from server.
+            </Text>
+            <Pressable
+              onPress={() => refetch()}
+              className="rounded-lg bg-primary px-3 py-1.5 active:scale-95"
+            >
+              <Text className="font-label-sm text-xs font-semibold text-on-primary">Retry</Text>
+            </Pressable>
+          </View>
+        ) : null}
+
         <View className="items-center overflow-hidden rounded-xl border border-surface-container-highest bg-surface-container-lowest p-stack-md">
           <View className="relative mb-4">
-            <Image
-              source={{
-                uri: "https://lh3.googleusercontent.com/aida-public/AB6AXuAF0GSWBN3SEeJvXox-yjlqsaYu_ge4r0Yoo4ksQl-tynj08njY9LW-R8fAszC59erGzQ4DKSPgSUaoNIdKwUwkyc3FnHigbhuWHZvR4wZNMvQYPLdcpTQid3TERcg0Oap8xa6j9E39ZKtoQ4qddhbahI9taSf0IkccQvgnh277w0lsWafsdakhfdFm7dwnVNDGu3-2wO3F_JsZrgi3IAlLIR2Z0cB0gfMruh33yjDJLQxv8z-KXKz6",
-              }}
-              resizeMode="cover"
-              className="h-28 w-28 rounded-full border-4 border-surface-container-lowest"
-            />
+            {isLoading && !profile ? (
+              <View className="h-28 w-28 items-center justify-center rounded-full border-4 border-surface-container-lowest bg-surface-container">
+                <ActivityIndicator size="small" color={themeColors.primary} />
+              </View>
+            ) : (
+              <Image
+                source={{ uri: photoUri }}
+                resizeMode="cover"
+                className="h-28 w-28 rounded-full border-4 border-surface-container-lowest"
+              />
+            )}
             <View className="absolute bottom-0 right-0 rounded-full border border-surface-container-highest bg-surface-container-lowest p-1">
-              <Pressable className="h-8 w-8 items-center justify-center rounded-full bg-primary">
+              <Pressable
+                onPress={() => router.push("/(driver)/edit-personal-info")}
+                className="h-8 w-8 items-center justify-center rounded-full bg-primary"
+              >
                 <MaterialIcons name="edit" size={16} color={themeColors.onPrimary} />
               </Pressable>
             </View>
           </View>
           <Text className="mb-2 text-center font-headline-lg-mobile text-headline-lg-mobile font-bold text-on-surface">
-            Marcus T.
+            {displayName}
           </Text>
           <View className="flex-row items-center gap-3">
             <View className="flex-row items-center rounded-full border border-primary-fixed bg-surface-container px-3 py-1.5">
@@ -110,17 +151,17 @@ export default function DriverAccountScreen() {
                 color={themeColors.primary}
                 style={{ marginRight: 4 }}
               />
-              <Text className="font-label-sm text-label-sm text-primary">4.9</Text>
+              <Text className="font-label-sm text-label-sm text-primary">{ratingText}</Text>
             </View>
             <View className="flex-row items-center rounded-full border border-secondary-fixed bg-secondary-container px-3 py-1.5">
               <MaterialIcons
-                name="workspace-premium"
+                name={profile?.verificationStatus === "approved" ? "verified" : "workspace-premium"}
                 size={16}
                 color={themeColors.onSecondaryContainer}
                 style={{ marginRight: 4 }}
               />
               <Text className="font-label-sm text-label-sm font-bold text-on-secondary-container">
-                Gold Tier
+                {verificationLabel}
               </Text>
             </View>
           </View>
@@ -185,7 +226,28 @@ export default function DriverAccountScreen() {
               </View>
             </View>
             <View className="flex-row items-center gap-2">
-              <View className="h-2 w-2 rounded-full bg-error" />
+              {profile?.verificationStatus === "approved" ? (
+                <View className="flex-row items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1">
+                  <MaterialIcons name="check-circle" size={12} color="#059669" />
+                  <Text className="text-[10px] font-bold tracking-wider text-emerald-700">
+                    APPROVED
+                  </Text>
+                </View>
+              ) : profile?.verificationStatus === "pending" ? (
+                <View className="flex-row items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1">
+                  <MaterialIcons name="schedule" size={12} color="#d97706" />
+                  <Text className="text-[10px] font-bold tracking-wider text-amber-700">
+                    PENDING
+                  </Text>
+                </View>
+              ) : (
+                <View className="flex-row items-center gap-1 rounded-full bg-red-50 px-2.5 py-1">
+                  <View className="h-2 w-2 rounded-full bg-error" />
+                  <Text className="text-[10px] font-bold tracking-wider text-error">
+                    REVIEW
+                  </Text>
+                </View>
+              )}
               <MaterialIcons name="chevron-right" size={24} color={themeColors.outline} />
             </View>
           </Pressable>

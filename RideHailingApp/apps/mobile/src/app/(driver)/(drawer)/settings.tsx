@@ -4,8 +4,9 @@ import { MaterialIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { clearAuthTokens } from "@/lib/api-client";
+import { useAuthStore } from "@/store/auth-store";
 import { themeColors } from "@/constants/theme-colors";
+import { useDriverNotifications } from "@/hooks/use-notifications";
 
 // Rule 3 substitutions used on this screen:
 // - Icon-ligature -> MaterialIcons substitution as on every screen in this project; every icon
@@ -243,6 +244,9 @@ function PasswordField() {
 export default function DriverSettingsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { data: notificationsData } = useDriverNotifications();
+  const unreadCount = notificationsData?.unreadCount ?? 0;
+
   const [pushEnabled, setPushEnabled] = useState(true);
   const [emailEnabled, setEmailEnabled] = useState(true);
   const [smsEnabled, setSmsEnabled] = useState(false);
@@ -250,8 +254,8 @@ export default function DriverSettingsScreen() {
   const [email, setEmail] = useState("alex.thompson@example.com");
 
   const handleSignOut = async () => {
-    await clearAuthTokens();
-    router.replace("/(driver-auth)/login");
+    await useAuthStore.getState().logout();
+    router.replace("/(driver-auth)/welcome");
   };
 
   return (
@@ -269,9 +273,12 @@ export default function DriverSettingsScreen() {
           </Text>
           <Pressable
             onPress={() => router.push("/(driver)/(drawer)/notifications")}
-            className="items-center justify-center rounded-full p-2 active:scale-95"
+            className="relative items-center justify-center rounded-full p-2 active:scale-95"
           >
             <MaterialIcons name="notifications" size={24} color={themeColors.onSurfaceVariant} />
+            {unreadCount > 0 ? (
+              <View className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-error" />
+            ) : null}
           </Pressable>
         </View>
       </View>

@@ -98,9 +98,11 @@ model Driver {
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt
 
-  vehicle    Vehicle?
-  rides      Ride[]      @relation("DriverRides")
-  rideOffers RideOffer[]
+  vehicle        Vehicle?
+  rides          Ride[]          @relation("DriverRides")
+  rideOffers     RideOffer[]
+  notifications  Notification[]
+  supportTickets SupportTicket[]
 
   @@map("drivers")
 }
@@ -149,10 +151,11 @@ model Ride {
   completedAt       DateTime?
   cancelledAt       DateTime?
 
-  passenger User        @relation("PassengerRides", fields: [passengerId], references: [id])
-  driver    Driver?     @relation("DriverRides", fields: [driverId], references: [id])
-  offers    RideOffer[]
-  ratings   Rating[]
+  passenger      User            @relation("PassengerRides", fields: [passengerId], references: [id])
+  driver         Driver?         @relation("DriverRides", fields: [driverId], references: [id])
+  offers         RideOffer[]
+  ratings        Rating[]
+  supportTickets SupportTicket[]
 
   @@map("rides")
 }
@@ -189,3 +192,56 @@ model Rating {
 
   @@map("ratings")
 }
+
+enum NotificationType {
+  account
+  ride
+  support
+  system
+}
+
+model Notification {
+  id        String           @id @default(uuid()) @db.Uuid
+  driverId  String           @db.Uuid
+  title     String
+  message   String
+  type      NotificationType @default(system)
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  driver Driver @relation(fields: [driverId], references: [id])
+
+  @@map("notifications")
+}
+
+enum SupportCategory {
+  ride
+  account
+  vehicle_document
+  technical
+  safety
+  other
+}
+
+enum SupportStatus {
+  open
+  resolved
+}
+
+model SupportTicket {
+  id          String          @id @default(uuid()) @db.Uuid
+  driverId    String          @db.Uuid
+  rideId      String?         @db.Uuid
+  category    SupportCategory
+  subject     String
+  description String
+  status      SupportStatus   @default(open)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  driver Driver @relation(fields: [driverId], references: [id])
+  ride   Ride?  @relation(fields: [rideId], references: [id])
+
+  @@map("support_tickets")
+}
+

@@ -1,11 +1,23 @@
-import { Image, Pressable, ScrollView, Text, View } from "react-native";
+import { Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { themeColors } from "@/constants/theme-colors";
+import { useRideDetails } from "@/hooks/use-ride-history";
 import { formatCurrency } from "@/utils/currency";
+import { NativeMap } from "@/components/native-map";
+
+function formatTimeOnly(dateString?: string | null): string | null {
+  if (!dateString) return null;
+  try {
+    const d = new Date(dateString);
+    return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  } catch {
+    return null;
+  }
+}
 
 // This source's own hardcoded example trip ($24.50 fare, 123 Market St -> 456 Embarcadero, base/
 // distance/tip of $10/$12.50/$2) is kept as the fallback data below.
@@ -47,7 +59,7 @@ const TIP_RATIO = 2 / DEFAULT_FARE;
 //   devices.
 //
 // Rule 5 approved presentation state / left inert (not guessed):
-// - The map is a static placeholder image, not a real map integration.
+// - NativeMap renders real MapView with pickup and dropoff markers and route polyline.
 // - The "layers" FAB (map layer options) is inert with a TODO: no alternate map layers exist yet.
 // - The mail icon button (message passenger) is inert with a TODO: no in-app messaging screen
 //   exists yet, same as this project's chat icons elsewhere.
@@ -64,20 +76,77 @@ export default function RideDetailsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{
+    rideId?: string;
     fare?: string;
     pickup?: string;
     dropoff?: string;
     dateTime?: string;
+    pickupLat?: string;
+    pickupLng?: string;
+    dropoffLat?: string;
+    dropoffLng?: string;
   }>();
 
-  const parsedFare = Number(params.fare);
-  const fare = Number.isFinite(parsedFare) && parsedFare > 0 ? parsedFare : DEFAULT_FARE;
-  const pickupLabel = params.pickup || DEFAULT_PICKUP;
-  const dropoffLabel = params.dropoff || DEFAULT_DROPOFF;
-  const pickupTimeLabel = params.dateTime || DEFAULT_PICKUP_TIME;
+  const { data: rideDetails } = useRideDetails(params.rideId);
+
+  const rawFare = rideDetails
+    ? (rideDetails.finalFare ?? rideDetails.proposedFare)
+    : Number(params.fare);
+  const fare = Number.isFinite(rawFare) && rawFare > 0 ? rawFare : DEFAULT_FARE;
+  const pickupLabel = rideDetails?.pickupAddress || params.pickup || DEFAULT_PICKUP;
+  const dropoffLabel = rideDetails?.dropoffAddress || params.dropoff || DEFAULT_DROPOFF;
+  const pickupTimeLabel =
+    formatTimeOnly(rideDetails?.startedAt || rideDetails?.requestedAt) ||
+    params.dateTime ||
+    DEFAULT_PICKUP_TIME;
+  const dropoffTimeLabel =
+    formatTimeOnly(rideDetails?.completedAt) ||
+    DEFAULT_DROPOFF_TIME;
+
   const baseFare = fare * BASE_FARE_RATIO;
   const distanceFare = fare * DISTANCE_FARE_RATIO;
   const tipFare = fare * TIP_RATIO;
+
+  const parsedPickupLat =
+    rideDetails?.pickupLat ?? (params.pickupLat ? Number(params.pickupLat) : NaN);
+  const parsedPickupLng =
+    rideDetails?.pickupLng ?? (params.pickupLng ? Number(params.pickupLng) : NaN);
+  const pickupPoint =
+    Number.isFinite(parsedPickupLat) && Number.isFinite(parsedPickupLng)
+      ? {
+          latitude: parsedPickupLat,
+          longitude: parsedPickupLng,
+          title: pickupLabel,
+        }
+      : null;
+
+  const parsedDropoffLat =
+    rideDetails?.dropoffLat ?? (params.dropoffLat ? Number(params.dropoffLat) : NaN);
+  const parsedDropoffLng =
+    rideDetails?.dropoffLng ?? (params.dropoffLng ? Number(params.dropoffLng) : NaN);
+  const dropoffPoint =
+    Number.isFinite(parsedDropoffLat) && Number.isFinite(parsedDropoffLng)
+      ? {
+          latitude: parsedDropoffLat,
+          longitude: parsedDropoffLng,
+          title: dropoffLabel,
+        }
+      : null;
+
+  const passengerName = rideDetails?.passenger?.name || "Sarah J.";
+  const passengerRating = rideDetails?.passenger?.rating
+    ? rideDetails.passenger.rating.toFixed(1)
+    : "4.9";
+  const passengerPhoto =
+    rideDetails?.passenger?.profilePhotoUrl ||
+    "https://lh3.googleusercontent.com/aida-public/AB6AXuCqrQ_c8klcWjtubHBOG1chwzpb2NDyEx1-MtQrqckZsGEj4uhTs-QMBa9-0Buh69QT8-rMQxx_Hj_lwZqkaA4VYhn-sgUQ-_AnRa0hSe7Hd68FWc2eh4Oshz1dd2KY2Bmefgo4eJzyVMk0KKySrAO6aUxDLwwS6FZ2oFZPKAqk7SOdLOjS6uGaRkX9LlO-YH5-WzAGVx3WwuU32XfQ5SzvwYo86m0cKTzf4UAYb9kNEfD65s671Ec8";
+
+  const distanceText = rideDetails?.distanceKm
+    ? `${Number(rideDetails.distanceKm).toFixed(1)} km`
+    : "3.2 mi";
+  const durationText = rideDetails?.etaMinutes
+    ? `${rideDetails.etaMinutes} min`
+    : "25 min";
 
   return (
     <View className="flex-1 items-center bg-background">
@@ -101,16 +170,16 @@ export default function RideDetailsScreen() {
         contentContainerClassName="pb-stack-lg"
       >
         <View className="relative h-64 w-full overflow-hidden bg-surface-container-high">
-          <Image
-            source={{
-              uri: "https://lh3.googleusercontent.com/aida-public/AB6AXuBtL5_VFtyaAzlK32XhM3revEQ42E289oThgWMs6BLbWjGDH7BJRWjgMj7F0mFVYLyFiq_21vuORCjaziHJwedludfC57tv6N6lXeuwb_lDD0oJTHbBuTZ9t2TMftkm-n9A3NzgaRuL9bYMflY0lkWQklZXYd7ooo0L9p3cDDwYlFI2Vom73S3P6pNcn7JSDmmfxRzqVfZNJ852g--ue_2Z3ZRqoD5Xz9BQLc7kN1NAGNMMy4JIErtv",
-            }}
-            resizeMode="cover"
-            className="absolute inset-0 h-full w-full"
+          <NativeMap
+            pickup={pickupPoint}
+            dropoff={dropoffPoint}
+            showsRoutePolyline={true}
+            style={StyleSheet.absoluteFillObject}
           />
           <LinearGradient
             colors={["transparent", themeColors.surface]}
             style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, opacity: 0.9 }}
+            pointerEvents="none"
           />
           {/* TODO: no alternate map layers exist yet. */}
           <Pressable className="absolute right-4 top-4 items-center justify-center rounded-full bg-surface p-2 shadow-sm active:scale-95">
@@ -128,28 +197,37 @@ export default function RideDetailsScreen() {
                 {formatCurrency(fare)}
               </Text>
               <View className="mt-2 flex-row items-center gap-1 rounded-full bg-surface-container-low px-3 py-1">
-                <MaterialIcons name="check-circle" size={16} color={themeColors.primary} />
-                <Text className="font-label-sm text-label-sm text-primary">Completed</Text>
+                <MaterialIcons
+                  name={rideDetails?.status === "cancelled" ? "cancel" : "check-circle"}
+                  size={16}
+                  color={rideDetails?.status === "cancelled" ? "#be123c" : themeColors.primary}
+                />
+                <Text
+                  className="font-label-sm text-label-sm"
+                  style={{
+                    color: rideDetails?.status === "cancelled" ? "#be123c" : themeColors.primary,
+                  }}
+                >
+                  {rideDetails?.status === "cancelled" ? "Cancelled" : "Completed"}
+                </Text>
               </View>
             </View>
 
             <View className="flex-row items-center gap-4 py-2">
               <View className="h-12 w-12 overflow-hidden rounded-full border-2 border-surface bg-surface-container-high">
                 <Image
-                  source={{
-                    uri: "https://lh3.googleusercontent.com/aida-public/AB6AXuCqrQ_c8klcWjtubHBOG1chwzpb2NDyEx1-MtQrqckZsGEj4uhTs-QMBa9-0Buh69QT8-rMQxx_Hj_lwZqkaA4VYhn-sgUQ-_AnRa0hSe7Hd68FWc2eh4Oshz1dd2KY2Bmefgo4eJzyVMk0KKySrAO6aUxDLwwS6FZ2oFZPKAqk7SOdLOjS6uGaRkX9LlO-YH5-WzAGVx3WwuU32XfQ5SzvwYo86m0cKTzf4UAYb9kNEfD65s671Ec8",
-                  }}
+                  source={{ uri: passengerPhoto }}
                   resizeMode="cover"
                   className="h-full w-full"
                 />
               </View>
               <View className="flex-1">
                 <Text className="font-body-md text-body-md font-bold text-on-surface">
-                  Sarah J.
+                  {passengerName}
                 </Text>
                 <View className="flex-row items-center gap-1">
                   <MaterialIcons name="star" size={14} color="#f59e0b" />
-                  <Text className="font-label-sm text-label-sm text-secondary">4.9</Text>
+                  <Text className="font-label-sm text-label-sm text-secondary">{passengerRating}</Text>
                 </View>
               </View>
               {/* TODO: no in-app messaging screen exists yet. */}
@@ -164,7 +242,7 @@ export default function RideDetailsScreen() {
                   Distance
                 </Text>
                 <Text className="font-body-md text-body-md font-semibold text-on-surface">
-                  3.2 mi
+                  {distanceText}
                 </Text>
               </View>
               <View className="flex-1">
@@ -172,7 +250,7 @@ export default function RideDetailsScreen() {
                   Duration
                 </Text>
                 <Text className="font-body-md text-body-md font-semibold text-on-surface">
-                  25 min
+                  {durationText}
                 </Text>
               </View>
             </View>
@@ -197,10 +275,8 @@ export default function RideDetailsScreen() {
                   <MaterialIcons name="location-on" size={14} color={themeColors.surface} />
                 </View>
                 <View className="flex-1">
-                  {/* No dropoff timestamp exists in history.tsx's row data (just one combined
-                      dateTime per ride) -- falls back to this source's own literal example. */}
                   <Text className="font-body-md text-body-md font-semibold text-on-surface">
-                    {DEFAULT_DROPOFF_TIME}
+                    {dropoffTimeLabel}
                   </Text>
                   <Text className="font-label-sm text-label-sm text-on-surface-variant">
                     {dropoffLabel}
@@ -233,9 +309,16 @@ export default function RideDetailsScreen() {
               </View>
             </View>
 
-            {/* TODO: no help/support screen exists yet. */}
             <View className="flex-row justify-center border-t border-surface-container-highest pt-stack-sm">
-              <Pressable className="flex-row items-center gap-2 p-2">
+              <Pressable
+                onPress={() =>
+                  router.push({
+                    pathname: "/(driver)/(drawer)/help-center",
+                    params: params.rideId ? { rideId: params.rideId } : undefined,
+                  })
+                }
+                className="flex-row items-center gap-2 p-2 active:scale-95"
+              >
                 <MaterialIcons name="help" size={20} color={themeColors.primary} />
                 <Text className="font-body-md text-body-md font-semibold text-primary">
                   Help with this trip

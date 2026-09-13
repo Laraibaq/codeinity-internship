@@ -1,9 +1,12 @@
+import { useEffect } from "react";
 import { Image, Pressable, ScrollView, Text, View } from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { useQueryClient } from "@tanstack/react-query";
 
 import { themeColors } from "@/constants/theme-colors";
 import { formatCurrency } from "@/utils/currency";
+import { apiClient } from "@/lib/api-client";
 
 // Source: "Ride Completed". Replaces the earlier placeholder built before this screen's real
 // design existed -- this pass only changes visual content; the `dismissTo` navigation approach
@@ -44,6 +47,23 @@ import { formatCurrency } from "@/utils/currency";
 // nor this task specifies, both pass `status: "online"` and land in the same place.
 export default function RideCompletedScreen() {
   const router = useRouter();
+  const queryClient = useQueryClient();
+  const params = useLocalSearchParams<{ rideId?: string; fare?: string }>();
+
+  useEffect(() => {
+    if (params.rideId && !params.rideId.startsWith("req-")) {
+      apiClient
+        .patch(`/rides/${params.rideId}/status`, { status: "completed" })
+        .then(() => {
+          queryClient.invalidateQueries({ queryKey: ["driver", "ride-history"] });
+          queryClient.invalidateQueries({ queryKey: ["driver", "earnings"] });
+        })
+        .catch(() => {});
+    }
+  }, [params.rideId, queryClient]);
+
+  const parsedFare = Number(params.fare);
+  const earnings = Number.isFinite(parsedFare) && parsedFare > 0 ? parsedFare : 18.5;
 
   const backToDashboard = () =>
     router.dismissTo({
@@ -85,7 +105,7 @@ export default function RideCompletedScreen() {
               Total Earnings
             </Text>
             <Text className="font-display-lg text-display-lg text-primary">
-              {formatCurrency(18.5)}
+              {formatCurrency(earnings)}
             </Text>
           </View>
 

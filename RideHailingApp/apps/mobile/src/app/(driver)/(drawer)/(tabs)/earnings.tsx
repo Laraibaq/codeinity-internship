@@ -6,6 +6,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { themeColors } from "@/constants/theme-colors";
 import { useOpenDrawer } from "@/hooks/use-open-drawer";
+import { useDriverEarnings } from "@/hooks/use-ride-history";
+import { useDriverNotifications } from "@/hooks/use-notifications";
 import { formatCurrency } from "@/utils/currency";
 
 type Period = "daily" | "weekly" | "monthly";
@@ -16,32 +18,30 @@ type FinanceBucket = {
   expenses: number;
 };
 
-// Mock data until the backend exposes a real earnings/expenses breakdown (Dependencies.docx §5,
-// Rides/RideOffers). "Expenses" here means platform commission + est. fuel cost per ride, not a
-// literal ledger yet. Profit per bucket = earnings - expenses.
+// Fallback skeleton buckets until backend data resolves
 const FINANCE_DATA: Record<Period, FinanceBucket[]> = {
   daily: [
-    { label: "Mon", earnings: 62, expenses: 18 },
-    { label: "Tue", earnings: 78, expenses: 22 },
-    { label: "Wed", earnings: 95, expenses: 27 },
-    { label: "Thu", earnings: 81, expenses: 24 },
-    { label: "Fri", earnings: 142, expenses: 38 },
-    { label: "Sat", earnings: 54, expenses: 16 },
-    { label: "Sun", earnings: 31, expenses: 10 },
+    { label: "Mon", earnings: 0, expenses: 0 },
+    { label: "Tue", earnings: 0, expenses: 0 },
+    { label: "Wed", earnings: 0, expenses: 0 },
+    { label: "Thu", earnings: 0, expenses: 0 },
+    { label: "Fri", earnings: 0, expenses: 0 },
+    { label: "Sat", earnings: 0, expenses: 0 },
+    { label: "Sun", earnings: 0, expenses: 0 },
   ],
   weekly: [
-    { label: "W1", earnings: 412, expenses: 118 },
-    { label: "W2", earnings: 486, expenses: 137 },
-    { label: "W3", earnings: 398, expenses: 109 },
-    { label: "W4", earnings: 543, expenses: 152 },
+    { label: "W1", earnings: 0, expenses: 0 },
+    { label: "W2", earnings: 0, expenses: 0 },
+    { label: "W3", earnings: 0, expenses: 0 },
+    { label: "W4", earnings: 0, expenses: 0 },
   ],
   monthly: [
-    { label: "Mar", earnings: 1840, expenses: 512 },
-    { label: "Apr", earnings: 1960, expenses: 548 },
-    { label: "May", earnings: 2110, expenses: 601 },
-    { label: "Jun", earnings: 1780, expenses: 496 },
-    { label: "Jul", earnings: 2340, expenses: 655 },
-    { label: "Aug", earnings: 2205, expenses: 612 },
+    { label: "Jan", earnings: 0, expenses: 0 },
+    { label: "Feb", earnings: 0, expenses: 0 },
+    { label: "Mar", earnings: 0, expenses: 0 },
+    { label: "Apr", earnings: 0, expenses: 0 },
+    { label: "May", earnings: 0, expenses: 0 },
+    { label: "Jun", earnings: 0, expenses: 0 },
   ],
 };
 
@@ -53,7 +53,7 @@ const PERIOD_OPTIONS: { key: Period; label: string }[] = [
 
 function FinanceChart({ data }: { data: FinanceBucket[] }) {
   const buckets = useMemo(
-    () => data.map((bucket) => ({ ...bucket, profit: bucket.earnings - bucket.expenses })),
+    () => data.map((bucket) => ({ ...bucket, profit: Math.max(0, bucket.earnings - bucket.expenses) })),
     [data],
   );
   const maxValue = Math.max(1, ...buckets.map((b) => Math.max(b.profit, b.expenses)));
@@ -77,11 +77,19 @@ function FinanceChart({ data }: { data: FinanceBucket[] }) {
             <View className="w-full flex-1 flex-row items-end justify-center gap-1">
               <View
                 className="w-full max-w-[14px] rounded-t-md bg-primary"
-                style={{ height: `${Math.max(4, (bucket.profit / maxValue) * 100)}%` }}
+                style={{
+                  height:
+                    bucket.profit > 0 ? `${Math.max(4, (bucket.profit / maxValue) * 100)}%` : "0%",
+                }}
               />
               <View
                 className="w-full max-w-[14px] rounded-t-md bg-rose-400"
-                style={{ height: `${Math.max(4, (bucket.expenses / maxValue) * 100)}%` }}
+                style={{
+                  height:
+                    bucket.expenses > 0
+                      ? `${Math.max(4, (bucket.expenses / maxValue) * 100)}%`
+                      : "0%",
+                }}
               />
             </View>
             <Text className="mt-1 font-label-sm text-[11px] text-on-surface-variant">
@@ -100,11 +108,25 @@ export default function DriverEarningsScreen() {
   const openDrawer = useOpenDrawer();
   const [period, setPeriod] = useState<Period>("daily");
 
-  const buckets = FINANCE_DATA[period];
+  const { data: earningsData } = useDriverEarnings();
+  const { data: notificationsData } = useDriverNotifications();
+  const unreadCount = notificationsData?.unreadCount ?? 0;
+
+  const buckets: FinanceBucket[] = useMemo(() => {
+    if (!earningsData) return FINANCE_DATA[period];
+    if (period === "daily") return earningsData.dailyBreakdown;
+    if (period === "weekly") return earningsData.weeklyBreakdown;
+    return earningsData.monthlyBreakdown;
+  }, [earningsData, period]);
+
   const totals = useMemo(() => {
     const earnings = buckets.reduce((sum, b) => sum + b.earnings, 0);
     const expenses = buckets.reduce((sum, b) => sum + b.expenses, 0);
-    return { earnings, expenses, profit: earnings - expenses };
+    return {
+      earnings,
+      expenses,
+      profit: Number(Math.max(0, earnings - expenses).toFixed(2)),
+    };
   }, [buckets]);
 
   return (
@@ -122,9 +144,12 @@ export default function DriverEarningsScreen() {
           </Text>
           <Pressable
             onPress={() => router.push("/(driver)/(drawer)/notifications")}
-            className="items-center justify-center rounded-full p-2 active:scale-95"
+            className="relative items-center justify-center rounded-full p-2 active:scale-95"
           >
             <MaterialIcons name="notifications" size={24} color={themeColors.primary} />
+            {unreadCount > 0 ? (
+              <View className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-error" />
+            ) : null}
           </Pressable>
         </View>
       </View>
@@ -216,7 +241,7 @@ export default function DriverEarningsScreen() {
           <View className="flex-1 items-center gap-1 rounded-xl border border-outline-variant/30 bg-white p-stack-sm shadow-sm">
             <MaterialIcons name="payments" size={16} color="#1d4ed8" />
             <Text className="font-fare-display text-[16px] text-on-surface">
-              {formatCurrency(84.5)}
+              {formatCurrency(earningsData?.today ?? 0)}
             </Text>
             <Text className="text-center font-label-sm text-[10px] uppercase text-on-surface-variant">
               Today
@@ -231,7 +256,9 @@ export default function DriverEarningsScreen() {
           </View>
           <View className="flex-1 items-center gap-1 rounded-xl border border-outline-variant/30 bg-white p-stack-sm shadow-sm">
             <MaterialIcons name="check-circle" size={16} color="#7e22ce" />
-            <Text className="font-fare-display text-[16px] text-on-surface">12</Text>
+            <Text className="font-fare-display text-[16px] text-on-surface">
+              {earningsData?.completedRidesCount ?? 0}
+            </Text>
             <Text className="text-center font-label-sm text-[10px] uppercase text-on-surface-variant">
               Rides
             </Text>

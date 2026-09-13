@@ -4,7 +4,8 @@ import { MaterialIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { apiClient, getApiErrorMessage, storeAuthTokens } from "@/lib/api-client";
+import { apiClient, getApiErrorMessage } from "@/lib/api-client";
+import { useAuthStore } from "@/store/auth-store";
 import { themeColors } from "@/constants/theme-colors";
 import { LoginMethodToggle } from "@/components/login-method-toggle";
 import { normalizePhone } from "@/utils/phone";
@@ -88,7 +89,7 @@ export default function DriverLoginScreen() {
         role: "driver" | "passenger";
         verificationStatus?: "pending" | "approved" | "rejected";
       }>("/auth/login", { identifier: normalizedIdentifier, password });
-      await storeAuthTokens(data.accessToken, data.refreshToken);
+      await useAuthStore.getState().login(data);
 
       // A driver account can exist and log in before their documents are reviewed -- only an
       // `approved` driver goes straight to the dashboard now. `pending`/`rejected` land back on

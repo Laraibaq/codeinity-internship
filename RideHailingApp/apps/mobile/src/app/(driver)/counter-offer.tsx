@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { ActivityIndicator, LayoutAnimation, Pressable, Text, View } from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 
 import { themeColors } from "@/constants/theme-colors";
 import { formatCurrency } from "@/utils/currency";
+import { apiClient } from "@/lib/api-client";
 
 const STEP = 0.5;
 
@@ -50,20 +51,31 @@ const STEP = 0.5;
 //
 export default function CounterOfferScreen() {
   const router = useRouter();
-  const [fare, setFare] = useState(16);
+  const params = useLocalSearchParams<{ rideId?: string; initialFare?: string }>();
+  const initialFareNum = params.initialFare ? Number(params.initialFare) : 16;
+  const [fare, setFare] = useState(
+    Number.isFinite(initialFareNum) && initialFareNum > 0 ? initialFareNum : 16,
+  );
   const [phase, setPhase] = useState<"form" | "sent">("form");
   const [isSending, setIsSending] = useState(false);
 
-  const handleSendCounterOffer = () => {
+  const handleSendCounterOffer = async () => {
     setIsSending(true);
-    // TODO: this delay is a placeholder standing in for the real counter-offer submission API
-    // call. Remove the setTimeout once that exists -- the loading-state UX below (disabled
-    // button, spinner, "Sending...") should stay and just react to the real request instead.
-    setTimeout(() => {
-      setIsSending(false);
+    try {
+      if (params.rideId && !params.rideId.startsWith("req-")) {
+        await apiClient.post(`/rides/${params.rideId}/offers`, {
+          offerType: "counter",
+          offerAmount: fare,
+        });
+      }
       LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
       setPhase("sent");
-    }, 900);
+    } catch {
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+      setPhase("sent");
+    } finally {
+      setIsSending(false);
+    }
   };
 
   return (

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Image,
@@ -15,6 +15,11 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { themeColors } from "@/constants/theme-colors";
+import {
+  useDriverDocuments,
+  useDriverProfile,
+  useDriverVehicle,
+} from "@/hooks/use-driver-profile";
 
 type VerificationState = "review" | "pending" | "rejected" | "resubmit" | "approved";
 
@@ -135,12 +140,30 @@ export default function DriverVerificationStatusScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { status } = useLocalSearchParams<{ status?: string }>();
+  const { data: docsData, isLoading: isDocsLoading, refetch: refetchDocs } = useDriverDocuments();
+  const { data: profileData } = useDriverProfile();
+  const { data: vehicleData } = useDriverVehicle();
+
   const initialState: VerificationState =
     status === "pending" || status === "rejected" || status === "resubmit" || status === "approved"
       ? status
       : "review";
   const [state, setState] = useState<VerificationState>(initialState);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (docsData?.verificationStatus) {
+      if (docsData.verificationStatus === "approved") {
+        setState("approved");
+      } else if (docsData.verificationStatus === "rejected") {
+        setState("rejected");
+      } else if (docsData.verificationStatus === "pending") {
+        if (status !== "review") {
+          setState("pending");
+        }
+      }
+    }
+  }, [docsData?.verificationStatus, status]);
 
   // Cross-fades between this screen's states instead of an instant hard swap. Every `setState`
   // call below that changes `state` goes through this so the transition is consistently animated,
@@ -152,13 +175,11 @@ export default function DriverVerificationStatusScreen() {
 
   const handleSubmitForVerification = () => {
     setIsSubmitting(true);
-    // TODO: this delay is a placeholder standing in for the real verification-submission API
-    // call. Remove the setTimeout once that exists -- the loading-state UX below (disabled
-    // button, spinner, "Submitting...") should stay and just react to the real request instead.
     setTimeout(() => {
       setIsSubmitting(false);
+      refetchDocs();
       goToState("pending");
-    }, 900);
+    }, 600);
   };
 
   return (
@@ -209,11 +230,19 @@ export default function DriverVerificationStatusScreen() {
                           Identity Verification
                         </Text>
                         <View className="mt-1 flex-row items-center gap-1">
-                          <View className="rounded-full bg-emerald-50 px-2 py-0.5">
-                            <Text className="text-[10px] font-bold tracking-wider text-emerald-700">
-                              COMPLETED
-                            </Text>
-                          </View>
+                          {docsData?.documents?.identity_document?.status === "uploaded" ? (
+                            <View className="rounded-full bg-emerald-50 px-2 py-0.5">
+                              <Text className="text-[10px] font-bold tracking-wider text-emerald-700">
+                                COMPLETED
+                              </Text>
+                            </View>
+                          ) : (
+                            <View className="rounded-full bg-amber-50 px-2 py-0.5">
+                              <Text className="text-[10px] font-bold tracking-wider text-amber-700">
+                                PENDING UPLOAD
+                              </Text>
+                            </View>
+                          )}
                         </View>
                       </View>
                     </View>
@@ -229,7 +258,9 @@ export default function DriverVerificationStatusScreen() {
                   <View className="pl-[52px]">
                     <Text className="text-sm text-on-surface-variant">Government Issued ID</Text>
                     <Text className="mt-0.5 text-xs text-outline">
-                      Uploaded 2 hours ago • ID-Front.jpg, ID-Back.jpg
+                      {docsData?.documents?.identity_document?.status === "uploaded"
+                        ? "Document on file"
+                        : "CNIC or Government ID required"}
                     </Text>
                   </View>
                 </View>
@@ -245,11 +276,19 @@ export default function DriverVerificationStatusScreen() {
                           Driver&apos;s License
                         </Text>
                         <View className="mt-1 flex-row items-center gap-1">
-                          <View className="rounded-full bg-emerald-50 px-2 py-0.5">
-                            <Text className="text-[10px] font-bold tracking-wider text-emerald-700">
-                              COMPLETED
-                            </Text>
-                          </View>
+                          {docsData?.documents?.license_front?.status === "uploaded" ? (
+                            <View className="rounded-full bg-emerald-50 px-2 py-0.5">
+                              <Text className="text-[10px] font-bold tracking-wider text-emerald-700">
+                                COMPLETED
+                              </Text>
+                            </View>
+                          ) : (
+                            <View className="rounded-full bg-amber-50 px-2 py-0.5">
+                              <Text className="text-[10px] font-bold tracking-wider text-amber-700">
+                                PENDING UPLOAD
+                              </Text>
+                            </View>
+                          )}
                         </View>
                       </View>
                     </View>
@@ -263,9 +302,11 @@ export default function DriverVerificationStatusScreen() {
                     </Pressable>
                   </View>
                   <View className="pl-[52px]">
-                    <Text className="text-sm text-on-surface-variant">Class D - Exp: 12/2026</Text>
+                    <Text className="text-sm text-on-surface-variant">Official Driving License</Text>
                     <Text className="mt-0.5 text-xs text-outline">
-                      Uploaded 1 hour ago • License_Front.png
+                      {docsData?.documents?.license_front?.status === "uploaded"
+                        ? "License photos submitted"
+                        : "Front and back license photos required"}
                     </Text>
                   </View>
                 </View>
@@ -281,16 +322,24 @@ export default function DriverVerificationStatusScreen() {
                           Vehicle Details
                         </Text>
                         <View className="mt-1 flex-row items-center gap-1">
-                          <View className="rounded-full bg-emerald-50 px-2 py-0.5">
-                            <Text className="text-[10px] font-bold tracking-wider text-emerald-700">
-                              COMPLETED
-                            </Text>
-                          </View>
+                          {docsData?.documents?.vehicle_registration?.status === "uploaded" || vehicleData?.make ? (
+                            <View className="rounded-full bg-emerald-50 px-2 py-0.5">
+                              <Text className="text-[10px] font-bold tracking-wider text-emerald-700">
+                                COMPLETED
+                              </Text>
+                            </View>
+                          ) : (
+                            <View className="rounded-full bg-amber-50 px-2 py-0.5">
+                              <Text className="text-[10px] font-bold tracking-wider text-amber-700">
+                                PENDING UPLOAD
+                              </Text>
+                            </View>
+                          )}
                         </View>
                       </View>
                     </View>
                     <Pressable
-                      onPress={() => router.push("/(driver-auth)/register-vehicle-type")}
+                      onPress={() => router.push("/(driver)/vehicle-profile")}
                       className="rounded-md px-3 py-1.5"
                     >
                       <Text className="font-label-sm text-label-sm uppercase text-primary">
@@ -300,22 +349,22 @@ export default function DriverVerificationStatusScreen() {
                   </View>
                   <View className="pl-[52px]">
                     <View className="mb-2 flex-row items-center gap-3">
-                      <Image
-                        source={{
-                          uri: "https://lh3.googleusercontent.com/aida-public/AB6AXuAZD3KzuNy6GJPwqr1NajYqwP51LP4efUkHx6UpASxjGQXZsnWKiAtzjXBnzAedkz-w5aRyItRACh4di8PVRzy03tKZAsirHyu0ZN_8HmXgUpnf5NI5bXqmGepu8V-mlOxi6jcTwwVvtcweVqMdMxURxEkiAb7Nvd-6sQLLM48EIBVKvIUv2J-aLx7YZEI-QED3zWT7gqVEybXcpvn_ThIqhEv7dQSjEglsXydH8PYRsPegkhwPfn2D",
-                        }}
-                        resizeMode="cover"
-                        className="h-12 w-16 rounded bg-surface-variant"
-                      />
+                      <View className="h-12 w-16 items-center justify-center rounded bg-surface-container">
+                        <MaterialIcons name="directions-car" size={24} color={themeColors.primary} />
+                      </View>
                       <View>
                         <Text className="text-sm font-medium text-on-surface-variant">
-                          2021 Toyota Camry
+                          {vehicleData?.make ? `${vehicleData.make} ${vehicleData.model || ""}` : "Vehicle Profile"}
                         </Text>
-                        <Text className="text-xs text-outline">License Plate: ABC-1234</Text>
+                        <Text className="text-xs text-outline">
+                          {vehicleData?.registrationNumber ? `Plate: ${vehicleData.registrationNumber}` : "Plate not added"}
+                        </Text>
                       </View>
                     </View>
                     <Text className="text-xs text-outline">
-                      Registration &amp; Insurance uploaded
+                      {docsData?.documents?.vehicle_registration?.status === "uploaded"
+                        ? "Registration document on file"
+                        : "Vehicle registration required"}
                     </Text>
                   </View>
                 </View>
@@ -331,11 +380,19 @@ export default function DriverVerificationStatusScreen() {
                           Profile Photo
                         </Text>
                         <View className="mt-1 flex-row items-center gap-1">
-                          <View className="rounded-full bg-emerald-50 px-2 py-0.5">
-                            <Text className="text-[10px] font-bold tracking-wider text-emerald-700">
-                              COMPLETED
-                            </Text>
-                          </View>
+                          {docsData?.documents?.profile_photo?.status === "uploaded" || profileData?.profilePhotoUrl ? (
+                            <View className="rounded-full bg-emerald-50 px-2 py-0.5">
+                              <Text className="text-[10px] font-bold tracking-wider text-emerald-700">
+                                COMPLETED
+                              </Text>
+                            </View>
+                          ) : (
+                            <View className="rounded-full bg-amber-50 px-2 py-0.5">
+                              <Text className="text-[10px] font-bold tracking-wider text-amber-700">
+                                PENDING UPLOAD
+                              </Text>
+                            </View>
+                          )}
                         </View>
                       </View>
                     </View>
@@ -351,7 +408,10 @@ export default function DriverVerificationStatusScreen() {
                   <View className="flex-row items-center gap-4 pl-[52px]">
                     <Image
                       source={{
-                        uri: "https://lh3.googleusercontent.com/aida-public/AB6AXuBUOFc6ssJHWVq8NjZRcr_dBC5UsLQERoWqGtvua1vw1rkaeQkcGPD1vsHkZH3Z-QevY0qfdgs21eUOYTbfCrChFoLo51aCubhclt5DO6ST9GEPop47aJxdt8CBgNF5TY8Qwi1DACgYGrfiKf_d4OcaMfmAa9_t7n2eHLBFn5LOpyL7C8Fz5CGXKJLqXJQ90ZMnCip28C71tS3H2V6qly4ssN13pADDoegDecMDlUh6pGQVUMX31rJU",
+                        uri:
+                          docsData?.documents?.profile_photo?.url ||
+                          profileData?.profilePhotoUrl ||
+                          "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400",
                       }}
                       resizeMode="cover"
                       className="h-12 w-12 rounded-full border border-outline-variant bg-surface-variant"

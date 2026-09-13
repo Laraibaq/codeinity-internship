@@ -1,15 +1,19 @@
 import { useState } from "react";
-import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import {
+  ActivityIndicator,
+  Alert,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { themeColors } from "@/constants/theme-colors";
-
-// New screen: safety-center.tsx's "Report a Passenger" row previously had no destination (a bare,
-// unwired Pressable). No backend endpoint exists yet to actually file a report -- same
-// reason-picker + notes pattern as reject-reason.tsx (this project's other "pick one of several
-// reasons" screen), with a local confirmation state standing in for the real submission.
+import { useSubmitSupportTicket } from "@/hooks/use-driver-support";
 
 const REASONS = [
   { value: "unsafe_behavior", label: "Unsafe or threatening behavior" },
@@ -22,9 +26,34 @@ const REASONS = [
 export default function ReportPassengerScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { rideId } = useLocalSearchParams<{ rideId?: string }>();
+  const submitTicket = useSubmitSupportTicket();
+
   const [selected, setSelected] = useState<string | null>(null);
   const [notes, setNotes] = useState("");
   const [submitted, setSubmitted] = useState(false);
+
+  const handleSubmit = () => {
+    if (!selected) return;
+    const reasonObj = REASONS.find((r) => r.value === selected);
+    submitTicket.mutate(
+      {
+        category: "safety",
+        subject: `Passenger Report: ${reasonObj?.label ?? "Safety Concern"}`,
+        description: notes.trim() || reasonObj?.label || "Safety incident reported by driver.",
+        rideId: rideId ? String(rideId) : undefined,
+      },
+      {
+        onSuccess: () => {
+          setSubmitted(true);
+        },
+        onError: (err: any) => {
+          const msg = err?.response?.data?.message || "Failed to submit report. Please try again.";
+          Alert.alert("Submission Failed", msg);
+        },
+      },
+    );
+  };
 
   if (submitted) {
     return (
@@ -67,6 +96,14 @@ export default function ReportPassengerScreen() {
         className="flex-1"
         contentContainerClassName="mx-auto w-full max-w-4xl gap-stack-md px-container-margin py-stack-md pb-32"
       >
+        {rideId ? (
+          <View className="rounded-xl border border-primary/30 bg-primaryFixed/20 p-stack-md">
+            <Text className="font-label-sm text-xs font-semibold text-primary">
+              Reporting for Trip #{rideId.slice(0, 8)}
+            </Text>
+          </View>
+        ) : null}
+
         <Text className="font-body-md text-body-md text-on-surface-variant">
           Let us know what happened. Your report is confidential.
         </Text>
@@ -116,12 +153,16 @@ export default function ReportPassengerScreen() {
 
       <View className="px-container-margin pb-stack-md pt-stack-sm">
         <Pressable
-          disabled={!selected}
-          onPress={() => setSubmitted(true)}
+          disabled={!selected || submitTicket.isPending}
+          onPress={handleSubmit}
           className="h-14 w-full items-center justify-center rounded-xl bg-primary shadow-sm active:scale-[0.98]"
-          style={selected ? undefined : { opacity: 0.5 }}
+          style={selected && !submitTicket.isPending ? undefined : { opacity: 0.5 }}
         >
-          <Text className="font-label-sm text-label-sm text-on-primary">Submit Report</Text>
+          {submitTicket.isPending ? (
+            <ActivityIndicator size="small" color={themeColors.onPrimary} />
+          ) : (
+            <Text className="font-label-sm text-label-sm text-on-primary">Submit Report</Text>
+          )}
         </Pressable>
       </View>
     </View>

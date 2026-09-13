@@ -1,10 +1,15 @@
-import { Image, Pressable, ScrollView, Text, View } from "react-native";
+import { useState } from "react";
+import { Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useQueryClient } from "@tanstack/react-query";
 
 import { themeColors } from "@/constants/theme-colors";
 import { formatCurrency } from "@/utils/currency";
+import { apiClient } from "@/lib/api-client";
+import { NativeMap } from "@/components/native-map";
+import { useLocationStore } from "@/store/location-store";
 
 // Rebuilt from scratch, replacing the previous draggable-bottom-sheet version. That version used
 // PanGestureHandler + Reanimated to snap between collapsed/default/expanded heights -- on web
@@ -15,8 +20,7 @@ import { formatCurrency } from "@/utils/currency";
 // visible card instead: same information, same actions, no drag/snap-point logic to get wrong on
 // any platform.
 //
-// Map background: dashboard.tsx's own map screenshot (a real San Francisco map, not the earlier
-// mismatched "Navigate To Pickup" mockup image this screen used to carry).
+// Map background: native MapView via NativeMap showing driver location, pickup location, and route.
 //
 // Ride data comes from route params (dashboard.tsx's inline request cards' Accept button passes
 // them), each falling back to a literal example if missing -- same pattern ride-details.tsx uses.
@@ -39,13 +43,27 @@ const DEFAULT_DROPOFF = "Pier 39, Fisherman's Wharf";
 export default function NavigateToPickupScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const queryClient = useQueryClient();
+  const [isCancelling, setIsCancelling] = useState(false);
+
   const params = useLocalSearchParams<{
+    rideId?: string;
     name?: string;
     rating?: string;
     fare?: string;
     pickup?: string;
     dropoff?: string;
+    pickupLat?: string;
+    pickupLng?: string;
+    dropoffLat?: string;
+    dropoffLng?: string;
   }>();
+
+  const { latitude: driverLat, longitude: driverLng } = useLocationStore();
+  const driverLocation =
+    driverLat != null && driverLng != null
+      ? { latitude: driverLat, longitude: driverLng }
+      : undefined;
 
   const name = params.name || DEFAULT_NAME;
   const parsedRating = Number(params.rating);
@@ -55,7 +73,28 @@ export default function NavigateToPickupScreen() {
   const pickupLabel = params.pickup || DEFAULT_PICKUP;
   const dropoffLabel = params.dropoff || DEFAULT_DROPOFF;
 
-  const handleCancelRide = () => {
+  const parsedPickupLat = params.pickupLat ? Number(params.pickupLat) : NaN;
+  const parsedPickupLng = params.pickupLng ? Number(params.pickupLng) : NaN;
+  const pickupPoint =
+    Number.isFinite(parsedPickupLat) && Number.isFinite(parsedPickupLng)
+      ? {
+          latitude: parsedPickupLat,
+          longitude: parsedPickupLng,
+          title: pickupLabel,
+        }
+      : null;
+
+  const handleCancelRide = async () => {
+    if (isCancelling) return;
+    setIsCancelling(true);
+    if (params.rideId && !params.rideId.startsWith("req-")) {
+      try {
+        await apiClient.patch(`/rides/${params.rideId}/status`, { status: "cancelled" });
+        queryClient.invalidateQueries({ queryKey: ["rides"] });
+      } catch (err) {
+        console.warn("Could not cancel ride:", err);
+      }
+    }
     router.dismissTo({
       pathname: "/(driver)/(drawer)/(tabs)/dashboard",
       params: { status: "online" },
@@ -65,12 +104,11 @@ export default function NavigateToPickupScreen() {
   return (
     <View className="flex-1 bg-surface">
       <View className="relative flex-1 overflow-hidden bg-surface-container-low">
-        <Image
-          source={{
-            uri: "https://lh3.googleusercontent.com/aida-public/AB6AXuCFyWmsppKp780nLLlL3AsgX2qtpTgOD1yJv761joNOqSnPBw6HRlT_ndHUdE8JrGlEI95RpLtYmz53Cko5COeKB4qYguYETwq9Uhp06DrwBph4bikKNamU4tNrTbQV-6ofR_9rWI1NlAuR3OqjDx2CI32zLY6Sy37zgynZFC2CIxoep3KV3UlVxZzAFVQVvVVdp9RwEwt4nd0qiZLmNTURNAakTjOxsTtSqaMH3MwArnGgEp8xqWJQ",
-          }}
-          resizeMode="cover"
-          className="absolute inset-0 h-full w-full opacity-70"
+        <NativeMap
+          driverLocation={driverLocation}
+          pickup={pickupPoint}
+          showsRoutePolyline={true}
+          style={StyleSheet.absoluteFillObject}
         />
 
         <View
@@ -216,7 +254,23 @@ export default function NavigateToPickupScreen() {
           className="border-t border-surface-container-high px-container-margin pt-3"
         >
           <Pressable
-            onPress={() => router.push("/(driver)/active-ride")}
+            onPress={() =>
+              router.push({
+                pathname: "/(driver)/active-ride",
+                params: {
+                  rideId: params.rideId,
+                  name,
+                  fare: String(fare),
+                  rating: String(rating),
+                  pickup: pickupLabel,
+                  dropoff: dropoffLabel,
+                  pickupLat: params.pickupLat,
+                  pickupLng: params.pickupLng,
+                  dropoffLat: params.dropoffLat,
+                  dropoffLng: params.dropoffLng,
+                },
+              })
+            }
             className="w-full flex-row items-center justify-center gap-2 rounded-xl bg-primary py-4 shadow-lg active:scale-[0.98]"
           >
             <Text className="text-lg font-headline-lg-mobile text-headline-lg-mobile text-on-primary">

@@ -5,8 +5,12 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { DriversModule } from './drivers/drivers.module';
+import { NotificationsModule } from './notifications/notifications.module';
 import { PrismaModule } from './prisma/prisma.module';
+import { RatingsModule } from './ratings/ratings.module';
+import { RidesModule } from './rides/rides.module';
 import { SupabaseModule } from './supabase/supabase.module';
+import { SupportModule } from './support/support.module';
 
 @Module({
   imports: [
@@ -21,6 +25,10 @@ import { SupabaseModule } from './supabase/supabase.module';
     SupabaseModule,
     AuthModule,
     DriversModule,
+    RidesModule,
+    RatingsModule,
+    SupportModule,
+    NotificationsModule,
   ],
   controllers: [AppController],
   providers: [AppService, { provide: APP_GUARD, useClass: ThrottlerGuard }],

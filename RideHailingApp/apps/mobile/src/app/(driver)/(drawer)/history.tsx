@@ -1,14 +1,31 @@
 import { useState } from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { themeColors } from "@/constants/theme-colors";
 import { useOpenDrawer } from "@/hooks/use-open-drawer";
+import { useDriverEarnings, useDriverRideHistory } from "@/hooks/use-ride-history";
+import { useDriverNotifications } from "@/hooks/use-notifications";
 import { formatCurrency } from "@/utils/currency";
 
 type HistoryTab = "completed" | "cancelled";
+
+function formatRideDate(dateString?: string | null): string {
+  if (!dateString) return "Recent Trip";
+  try {
+    const d = new Date(dateString);
+    return d.toLocaleDateString(undefined, {
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  } catch {
+    return dateString;
+  }
+}
 
 // Rule 3 substitutions used on this screen:
 // - Icon-ligature -> MaterialIcons substitution as on every screen in this project; every icon
@@ -43,45 +60,6 @@ type HistoryTab = "completed" | "cancelled";
 // - The header's menu icon -> settings.tsx (push), same as account.tsx/earnings.tsx, per explicit
 //   confirmation. The notifications bell stays inert -- no destination specified anywhere.
 
-const rides = [
-  {
-    id: "1",
-    dateTime: "Oct 24, 2:30 PM",
-    rideType: "UberX",
-    pickup: "123 Market St",
-    dropoff: "456 Mission St",
-    fare: 24.5,
-    dimmed: false,
-  },
-  {
-    id: "2",
-    dateTime: "Oct 24, 1:15 PM",
-    rideType: "Comfort",
-    pickup: "SFO Terminal 2",
-    dropoff: "Union Square",
-    fare: 48.0,
-    dimmed: false,
-  },
-  {
-    id: "3",
-    dateTime: "Oct 24, 11:30 AM",
-    rideType: "UberX",
-    pickup: "Golden Gate Park",
-    dropoff: "Painted Ladies",
-    fare: 18.5,
-    dimmed: false,
-  },
-  {
-    id: "4",
-    dateTime: "Oct 24, 9:00 AM",
-    rideType: "UberX",
-    pickup: "Embarcadero",
-    dropoff: "Pier 39",
-    fare: 12.0,
-    dimmed: true,
-  },
-];
-
 // Fixed: this tab toggle's active-segment className, and the dimmed-ride-row opacity below, used to
 // be interpolated into template literals -- the same NativeWind runtime anti-pattern root-caused on
 // login.tsx's phone/email toggle (which was itself modeled on this exact tab-pill pattern, per this
@@ -103,6 +81,11 @@ export default function DriverHistoryScreen() {
   const openDrawer = useOpenDrawer();
   const [tab, setTab] = useState<HistoryTab>("completed");
 
+  const { data: historyRides, isLoading, isError, refetch } = useDriverRideHistory(tab);
+  const { data: earningsData } = useDriverEarnings();
+  const { data: notificationsData } = useDriverNotifications();
+  const unreadCount = notificationsData?.unreadCount ?? 0;
+
   return (
     <View className="flex-1 bg-background">
       <View style={{ paddingTop: insets.top }} className="w-full bg-surface shadow-sm">
@@ -118,9 +101,12 @@ export default function DriverHistoryScreen() {
           </Text>
           <Pressable
             onPress={() => router.push("/(driver)/(drawer)/notifications")}
-            className="-mr-2 items-center justify-center rounded-full p-2 active:scale-95"
+            className="-mr-2 relative items-center justify-center rounded-full p-2 active:scale-95"
           >
             <MaterialIcons name="notifications" size={24} color={themeColors.primary} />
+            {unreadCount > 0 ? (
+              <View className="absolute right-1 top-1 h-2 w-2 rounded-full bg-error" />
+            ) : null}
           </Pressable>
         </View>
       </View>
@@ -170,7 +156,7 @@ export default function DriverHistoryScreen() {
                   Today&apos;s Earnings
                 </Text>
                 <Text className="font-fare-display text-fare-display text-on-surface">
-                  {formatCurrency(142.5)}
+                  {formatCurrency(earningsData?.today ?? 0)}
                 </Text>
               </View>
               <View className="items-end">
@@ -178,89 +164,130 @@ export default function DriverHistoryScreen() {
                   Completed Trips
                 </Text>
                 <Text className="font-headline-lg-mobile text-headline-lg-mobile text-on-surface">
-                  6
+                  {earningsData?.completedRidesCount ?? 0}
                 </Text>
               </View>
             </View>
           </View>
 
-          <View className="gap-gutter">
-            {rides.map((ride) => (
-              <Pressable
-                key={ride.id}
-                onPress={() =>
-                  router.push({
-                    pathname: "/(driver)/ride-details",
-                    params: {
-                      fare: String(ride.fare),
-                      pickup: ride.pickup,
-                      dropoff: ride.dropoff,
-                      dateTime: ride.dateTime,
-                    },
-                  })
-                }
-                className="flex-row items-center justify-between rounded-xl border border-outline-variant bg-surface p-4 shadow-sm"
-                style={ride.dimmed ? { opacity: 0.7 } : undefined}
-              >
-                <View className="flex-1 flex-row items-start gap-4">
-                  <View className="h-10 w-10 items-center justify-center rounded-full bg-surface-container-low">
-                    <MaterialIcons name="local-taxi" size={20} color={themeColors.primary} />
-                  </View>
-                  <View className="flex-1">
-                    <View className="mb-1 flex-row items-center gap-2">
-                      <Text className="text-[14px] font-bold text-on-surface">
-                        {ride.dateTime}
-                      </Text>
-                      <View className="rounded-full bg-primary-container px-2 py-0.5">
-                        <Text className="font-label-sm text-[10px] text-on-primary-container">
-                          {ride.rideType}
-                        </Text>
-                      </View>
-                    </View>
-                    <View className="relative mt-2 gap-1 pl-3">
-                      <View className="absolute bottom-2 left-1 top-2 w-0.5 bg-outline-variant" />
-                      <View className="flex-row items-center gap-2">
-                        <View className="absolute -left-[9px] h-2 w-2 rounded-full border-2 border-primary bg-surface" />
-                        <Text
-                          className="text-[13px] text-on-surface-variant"
-                          numberOfLines={1}
-                        >
-                          {ride.pickup}
-                        </Text>
-                      </View>
-                      <View className="mt-1 flex-row items-center gap-2">
-                        <View className="absolute -left-[9px] h-2 w-2 rounded-sm bg-on-surface" />
-                        <Text
-                          className="text-[13px] text-on-surface-variant"
-                          numberOfLines={1}
-                        >
-                          {ride.dropoff}
-                        </Text>
-                      </View>
-                    </View>
-                  </View>
-                </View>
-                <View className="items-end justify-center gap-2">
-                  <Text className="text-[18px] font-fare-display text-on-surface">
-                    {formatCurrency(ride.fare)}
-                  </Text>
-                  <MaterialIcons
-                    name="chevron-right"
-                    size={20}
-                    color={themeColors.outlineVariant}
-                  />
-                </View>
-              </Pressable>
-            ))}
-          </View>
-
-          <View className="mt-8 items-center">
-            <Pressable className="rounded-full border border-outline px-6 py-2">
-              <Text className="font-label-sm text-label-sm text-on-surface">
-                Load More History
+          {isLoading ? (
+            <View className="items-center justify-center py-16">
+              <ActivityIndicator size="large" color={themeColors.primary} />
+              <Text className="mt-3 font-label-sm text-label-sm text-secondary">
+                Loading {tab} rides...
               </Text>
-            </Pressable>
-          </View>
+            </View>
+          ) : isError ? (
+            <View className="items-center justify-center py-12 rounded-xl border border-outline-variant bg-surface p-6">
+              <MaterialIcons name="error-outline" size={36} color={themeColors.secondary} />
+              <Text className="mt-2 font-body-md text-body-md font-bold text-on-surface">
+                Failed to load ride history
+              </Text>
+              <Pressable
+                onPress={() => refetch()}
+                className="mt-4 rounded-full bg-primary px-5 py-2 active:scale-95"
+              >
+                <Text className="font-label-sm text-label-sm font-bold text-on-primary">
+                  Retry
+                </Text>
+              </Pressable>
+            </View>
+          ) : !historyRides || historyRides.length === 0 ? (
+            <View className="items-center justify-center py-16 rounded-xl border border-outline-variant bg-surface p-6">
+              <View className="mb-3 h-14 w-14 items-center justify-center rounded-full bg-surface-container-low">
+                <MaterialIcons name="history" size={28} color={themeColors.secondary} />
+              </View>
+              <Text className="font-body-md text-body-md font-bold text-on-surface">
+                {tab === "completed" ? "No completed rides yet" : "No cancelled rides"}
+              </Text>
+              <Text className="mt-1 text-center font-label-sm text-label-sm text-secondary">
+                {tab === "completed"
+                  ? "Your completed trips and earnings will appear here."
+                  : "Trips cancelled by you or passengers will appear here."}
+              </Text>
+            </View>
+          ) : (
+            <View className="gap-gutter">
+              {historyRides.map((ride) => {
+                const fare = ride.finalFare || ride.proposedFare;
+                const formattedDate = formatRideDate(
+                  ride.completedAt || ride.cancelledAt || ride.requestedAt,
+                );
+
+                return (
+                  <Pressable
+                    key={ride.id}
+                    onPress={() =>
+                      router.push({
+                        pathname: "/(driver)/ride-details",
+                        params: {
+                          rideId: ride.id,
+                          fare: String(fare),
+                          pickup: ride.pickupAddress,
+                          dropoff: ride.dropoffAddress,
+                          dateTime: formattedDate,
+                          pickupLat: String(ride.pickupLat),
+                          pickupLng: String(ride.pickupLng),
+                          dropoffLat: String(ride.dropoffLat),
+                          dropoffLng: String(ride.dropoffLng),
+                        },
+                      })
+                    }
+                    className="flex-row items-center justify-between rounded-xl border border-outline-variant bg-surface p-4 shadow-sm"
+                  >
+                    <View className="flex-1 flex-row items-start gap-4">
+                      <View className="h-10 w-10 items-center justify-center rounded-full bg-surface-container-low">
+                        <MaterialIcons name="local-taxi" size={20} color={themeColors.primary} />
+                      </View>
+                      <View className="flex-1">
+                        <View className="mb-1 flex-row items-center gap-2">
+                          <Text className="text-[14px] font-bold text-on-surface">
+                            {formattedDate}
+                          </Text>
+                          <View className="rounded-full bg-primary-container px-2 py-0.5">
+                            <Text className="font-label-sm text-[10px] text-on-primary-container">
+                              {ride.passenger?.name || "Standard Ride"}
+                            </Text>
+                          </View>
+                        </View>
+                        <View className="relative mt-2 gap-1 pl-3">
+                          <View className="absolute bottom-2 left-1 top-2 w-0.5 bg-outline-variant" />
+                          <View className="flex-row items-center gap-2">
+                            <View className="absolute -left-[9px] h-2 w-2 rounded-full border-2 border-primary bg-surface" />
+                            <Text
+                              className="text-[13px] text-on-surface-variant"
+                              numberOfLines={1}
+                            >
+                              {ride.pickupAddress}
+                            </Text>
+                          </View>
+                          <View className="mt-1 flex-row items-center gap-2">
+                            <View className="absolute -left-[9px] h-2 w-2 rounded-sm bg-on-surface" />
+                            <Text
+                              className="text-[13px] text-on-surface-variant"
+                              numberOfLines={1}
+                            >
+                              {ride.dropoffAddress}
+                            </Text>
+                          </View>
+                        </View>
+                      </View>
+                    </View>
+                    <View className="items-end justify-center gap-2">
+                      <Text className="text-[18px] font-fare-display text-on-surface">
+                        {formatCurrency(fare)}
+                      </Text>
+                      <MaterialIcons
+                        name="chevron-right"
+                        size={20}
+                        color={themeColors.outlineVariant}
+                      />
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </View>
+          )}
         </View>
       </ScrollView>
     </View>

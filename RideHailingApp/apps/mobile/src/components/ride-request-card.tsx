@@ -15,6 +15,10 @@ export type RideRequest = {
   dropoffMeta: string;
   totalMinutes: number;
   ratePerMin: number;
+  pickupLat?: number;
+  pickupLng?: number;
+  dropoffLat?: number;
+  dropoffLng?: number;
 };
 
 // Inline replacement for the deleted ride-request-notification.tsx popup: dashboard.tsx's "online"

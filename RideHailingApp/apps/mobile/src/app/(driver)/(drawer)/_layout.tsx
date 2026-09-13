@@ -5,6 +5,7 @@ import { Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { themeColors } from "@/constants/theme-colors";
+import { useDriverProfile } from "@/hooks/use-driver-profile";
 
 // Sidebar for the driver app. Everything that isn't one of the 3 primary bottom tabs (Dashboard,
 // Earnings, Account -- see (tabs)/_layout.tsx) lives here as a real menu item instead of being
@@ -39,6 +40,7 @@ const MENU_ITEMS: {
 function DriverDrawerContent({ navigation, state }: DrawerContentComponentProps) {
   const insets = useSafeAreaInsets();
   const activeRouteName = state.routes[state.index]?.name;
+  const { data: profile } = useDriverProfile();
 
   return (
     <View style={{ paddingTop: insets.top }} className="flex-1 bg-surface">
@@ -46,7 +48,9 @@ function DriverDrawerContent({ navigation, state }: DrawerContentComponentProps)
         <Text className="font-headline-lg-mobile text-headline-lg-mobile font-bold text-primary">
           Driver Portal
         </Text>
-        <Text className="font-label-sm text-label-sm text-on-surface-variant">Marcus T.</Text>
+        <Text className="font-label-sm text-label-sm text-on-surface-variant">
+          {profile?.name || "Driver"}
+        </Text>
       </View>
 
       <View className="gap-1 px-2 pt-stack-sm">

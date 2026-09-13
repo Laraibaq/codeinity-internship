@@ -1,11 +1,16 @@
-import { Image, Pressable, Text, View } from "react-native";
+import { useState } from "react";
+import { Image, Pressable, StyleSheet, Text, View } from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useQueryClient } from "@tanstack/react-query";
 
 import { themeColors } from "@/constants/theme-colors";
 import { requestDrawerOpen } from "@/utils/drawer-open-request";
+import { apiClient } from "@/lib/api-client";
+import { NativeMap } from "@/components/native-map";
+import { useLocationStore } from "@/store/location-store";
 
 // Source: "Active Ride" (Part 6). Reached by pushing from navigate-to-pickup.tsx's "I've Arrived".
 //
@@ -26,12 +31,7 @@ import { requestDrawerOpen } from "@/utils/drawer-open-request";
 // drawer-open-request.ts import and this file's own Pressable comment below for how, given this
 // screen sits outside the Drawer's navigation tree.
 //
-// Rule 5 approved presentation state / left inert (not guessed):
-// - The map is a static placeholder image, not real GPS/routing -- separate backend/Mapbox wiring.
-// - The "directions" icon button (route header) is inert with a TODO: no alternate-route action
-//   exists yet.
-// - Chat/Call buttons are inert with TODOs: no messaging screen or telephony wired, same as
-//   navigate-to-pickup.tsx.
+// Native Map: renders real NativeMap with driver position, dropoff destination, and route polyline.
 //
 // "Swipe to Start Ride" per this batch's explicit instruction: the source drags a handle via mouse/
 // touch events with no RN equivalent without `react-native-gesture-handler` (installed, but wiring
@@ -46,6 +46,63 @@ import { requestDrawerOpen } from "@/utils/drawer-open-request";
 export default function ActiveRideScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const queryClient = useQueryClient();
+  const [isStarting, setIsStarting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const params = useLocalSearchParams<{
+    rideId?: string;
+    name?: string;
+    fare?: string;
+    rating?: string;
+    pickup?: string;
+    dropoff?: string;
+    pickupLat?: string;
+    pickupLng?: string;
+    dropoffLat?: string;
+    dropoffLng?: string;
+  }>();
+
+  const { latitude: driverLat, longitude: driverLng } = useLocationStore();
+  const driverLocation =
+    driverLat != null && driverLng != null
+      ? { latitude: driverLat, longitude: driverLng }
+      : undefined;
+
+  const parsedDropoffLat = params.dropoffLat ? Number(params.dropoffLat) : NaN;
+  const parsedDropoffLng = params.dropoffLng ? Number(params.dropoffLng) : NaN;
+  const dropoffPoint =
+    Number.isFinite(parsedDropoffLat) && Number.isFinite(parsedDropoffLng)
+      ? {
+          latitude: parsedDropoffLat,
+          longitude: parsedDropoffLng,
+          title: params.dropoff || "Destination",
+        }
+      : null;
+
+  const handleStartRide = async () => {
+    if (isStarting) return;
+    setIsStarting(true);
+    setErrorMsg(null);
+    if (params.rideId && !params.rideId.startsWith("req-")) {
+      try {
+        await apiClient.patch(`/rides/${params.rideId}/status`, { status: "ongoing" });
+        queryClient.invalidateQueries({ queryKey: ["rides"] });
+      } catch (err: any) {
+        setIsStarting(false);
+        const msg = err?.response?.data?.message || "Failed to start ride";
+        setErrorMsg(typeof msg === "string" ? msg : "Failed to start ride");
+        return;
+      }
+    }
+    router.push({
+      pathname: "/(driver)/ride-completed",
+      params: {
+        rideId: params.rideId,
+        fare: params.fare,
+      },
+    });
+  };
 
   return (
     <View className="h-screen w-full flex-1 bg-background">
@@ -88,34 +145,12 @@ export default function ActiveRideScreen() {
 
       <View className="relative z-0 flex-1">
         <View className="absolute inset-0 items-center justify-center overflow-hidden bg-surface-variant">
-          <Image
-            source={{
-              uri: "https://lh3.googleusercontent.com/aida-public/AB6AXuDgA_JMRXxqsIiwuFN4FCYeYLbhV8nUpLSb4eR69v2UvSWj7iZe6SW9oDnX9BrBSg43rZN-6ujyEkM_cRmDfCnS7PqMldz34Mt88pF1LsJAicrTATPLFJHrLRGPieP4zYe05sV1MHZgHb5zrUqy_-ksBWi7FR6Zw2eKcXFNzpNJWGrH9kdW3Me4ZK4oGr1iwk4kIXdRK5C9irqzgIClPZ10PQwn0fsfTEjieabPOXRkvxqebEaq-iO6",
-              }}
-              resizeMode="cover"
-              className="h-full w-full opacity-60"
+          <NativeMap
+            driverLocation={driverLocation}
+            dropoff={dropoffPoint}
+            showsRoutePolyline={true}
+            style={StyleSheet.absoluteFillObject}
           />
-
-          <View className="absolute left-1/3 top-1/2 -translate-x-1/2 -translate-y-1/2 items-center justify-center">
-            <View className="h-8 w-8 items-center justify-center rounded-full border-2 border-primary bg-surface shadow-lg">
-              <MaterialIcons
-                name="navigation"
-                size={18}
-                color={themeColors.primary}
-                style={{ transform: [{ rotate: "45deg" }] }}
-              />
-            </View>
-          </View>
-
-          <View className="absolute left-2/3 top-1/4 -translate-x-1/2 -translate-y-1/2 items-center">
-            <View className="mb-2 flex-row items-center gap-1 rounded-full bg-inverse-surface px-3 py-1 shadow-md">
-              <MaterialIcons name="schedule" size={14} color={themeColors.inverseOnSurface} />
-              <Text className="font-label-sm text-label-sm text-inverse-on-surface">12 min</Text>
-            </View>
-            <View className="h-8 w-8 items-center justify-center rounded-full border-2 border-inverse-surface bg-surface shadow-lg">
-              <View className="h-3 w-3 rounded-sm bg-inverse-surface" />
-            </View>
-          </View>
 
           <LinearGradient
             colors={["rgba(249,249,255,0.8)", "rgba(249,249,255,0)"]}
@@ -135,7 +170,7 @@ export default function ActiveRideScreen() {
             <View className="mb-1 flex-row items-start justify-between">
               <View>
                 <Text className="mb-1 font-headline-lg-mobile text-headline-lg-mobile text-on-surface">
-                  Heading to Pier 39
+                  Heading to {params.dropoff || "Pier 39"}
                 </Text>
                 <View className="flex-row items-center gap-1">
                   <Text className="font-bold text-primary">12 mins</Text>
@@ -167,7 +202,7 @@ export default function ActiveRideScreen() {
               </View>
               <View>
                 <Text className="text-[16px] font-label-sm leading-tight text-on-surface">
-                  Alex M.
+                  {params.name || "Alex M."}
                 </Text>
                 <View className="mt-0.5 flex-row items-center gap-1 text-on-surface-variant">
                   <Text className="text-[12px] font-medium">4.9</Text>
@@ -189,13 +224,12 @@ export default function ActiveRideScreen() {
           </View>
 
           <View className="bg-surface-bright px-container-margin py-stack-md">
-            {/* Fixed, per explicit request: was a fake "swipe" control (a static tap-target
-                standing in for a real drag gesture that was never built) -- now a real button,
-                same as every other primary action in this app. Tapping this still skips a "trip in
-                progress" state that doesn't exist yet as a screen; that shortcut is unchanged, only
-                the swipe pretense is gone. */}
+            {errorMsg ? (
+              <Text className="mb-2 text-center font-label-sm text-error">{errorMsg}</Text>
+            ) : null}
             <Pressable
-              onPress={() => router.push("/(driver)/ride-completed")}
+              onPress={handleStartRide}
+              disabled={isStarting}
               className="h-14 w-full flex-row items-center justify-center gap-2 rounded-full bg-primary shadow-md active:scale-[0.98]"
             >
               <MaterialIcons name="play-arrow" size={22} color={themeColors.onPrimary} />

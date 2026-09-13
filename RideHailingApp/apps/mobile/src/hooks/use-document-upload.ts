@@ -1,7 +1,9 @@
 import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import * as ImagePicker from "expo-image-picker";
 
 import { apiClient, getApiErrorMessage } from "@/lib/api-client";
+import { DRIVER_DOCUMENTS_QUERY_KEY, DRIVER_PROFILE_QUERY_KEY } from "@/hooks/use-driver-profile";
 
 // Matches the backend's DocumentType enum exactly (apps/backend/src/drivers/dto/upload-document.dto.ts).
 export type DocumentType =
@@ -32,6 +34,7 @@ interface UseDocumentUploadResult {
 // permission, launch the picker, then POST the result to /drivers/me/documents with the given
 // documentType, using the shared api-client's stored access token.
 export function useDocumentUpload(documentType: DocumentType): UseDocumentUploadResult {
+  const queryClient = useQueryClient();
   const [uri, setUri] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploaded, setUploaded] = useState(false);
@@ -83,6 +86,8 @@ export function useDocumentUpload(documentType: DocumentType): UseDocumentUpload
       // the server needs to parse the body at all.
       await apiClient.post("/drivers/me/documents", formData);
       setUploaded(true);
+      queryClient.invalidateQueries({ queryKey: DRIVER_DOCUMENTS_QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: DRIVER_PROFILE_QUERY_KEY });
     } catch (err) {
       setError(getApiErrorMessage(err, "Upload failed. Please try again."));
     } finally {

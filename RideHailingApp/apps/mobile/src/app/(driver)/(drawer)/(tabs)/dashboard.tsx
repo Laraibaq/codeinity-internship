@@ -1,15 +1,20 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Image, LayoutAnimation, Pressable, ScrollView, Text, View } from "react-native";
+import { LayoutAnimation, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
 import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import { BlurView } from "expo-blur";
 import { DrawerActions, useFocusEffect } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+
 import { themeColors } from "@/constants/theme-colors";
 import { formatCurrency } from "@/utils/currency";
 import { RideRequestCard, type RideRequest } from "@/components/ride-request-card";
 import { consumeDrawerOpenRequest } from "@/utils/drawer-open-request";
+import { apiClient } from "@/lib/api-client";
+import { NativeMap } from "@/components/native-map";
+import { useLocationStore } from "@/store/location-store";
 
 type DriverStatus = "online" | "offline";
 type OnlineView = "searching" | "no-requests";
@@ -147,6 +152,23 @@ const SAMPLE_REQUESTS: Omit<RideRequest, "id">[] = [
 // on an unmounted screen.
 const REQUEST_EXPIRY_MS = 15000;
 
+interface ApiAvailableRide {
+  id: string;
+  pickupAddress: string;
+  dropoffAddress: string;
+  pickupLat?: number;
+  pickupLng?: number;
+  dropoffLat?: number;
+  dropoffLng?: number;
+  distanceKm: number;
+  etaMinutes: number;
+  proposedFare: number;
+  passenger: {
+    name: string;
+    rating: number | null;
+  };
+}
+
 export default function DriverDashboardScreen() {
   const router = useRouter();
   const navigation = useNavigation();
@@ -155,8 +177,119 @@ export default function DriverDashboardScreen() {
   const [status, setStatus] = useState<DriverStatus>("offline");
   const [onlineView, setOnlineView] = useState<OnlineView>("searching");
   const [requests, setRequests] = useState<RideRequest[]>([]);
+  const [acceptError, setAcceptError] = useState<string | null>(null);
   const nextSampleIndex = useRef(0);
   const requestTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+
+  const {
+    latitude: driverLat,
+    longitude: driverLng,
+    startTracking,
+    stopTracking,
+    error: locationError,
+  } = useLocationStore();
+
+  const driverLocation =
+    driverLat != null && driverLng != null
+      ? { latitude: driverLat, longitude: driverLng }
+      : undefined;
+
+  const handleGoOnline = async () => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setStatus("online");
+    try {
+      await startTracking();
+      await apiClient.patch("/drivers/me/status", { isOnline: true });
+    } catch (err) {
+      console.warn("Could not sync online status or start tracking:", err);
+    }
+  };
+
+  const handleGoOffline = async () => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setStatus("offline");
+    try {
+      stopTracking();
+      await apiClient.patch("/drivers/me/status", { isOnline: false });
+    } catch (err) {
+      console.warn("Could not sync offline status:", err);
+    }
+  };
+
+  const queryClient = useQueryClient();
+  const { data: availableRides } = useQuery<ApiAvailableRide[]>({
+    queryKey: ["rides", "available"],
+    queryFn: async () => {
+      const res = await apiClient.get<ApiAvailableRide[]>("/rides/available");
+      return res.data;
+    },
+    enabled: status === "online",
+    refetchInterval: status === "online" ? 5000 : false,
+  });
+
+  const apiRequests: RideRequest[] = (availableRides || []).map((ride) => ({
+    id: ride.id,
+    name: ride.passenger?.name || "Passenger",
+    rating: ride.passenger?.rating ?? 4.9,
+    offer: Number(ride.proposedFare),
+    pickupLabel: ride.pickupAddress,
+    pickupMeta: `${ride.etaMinutes} min`,
+    dropoffLabel: ride.dropoffAddress,
+    dropoffMeta: `${ride.distanceKm} km`,
+    totalMinutes: ride.etaMinutes,
+    ratePerMin: Number((Number(ride.proposedFare) / (ride.etaMinutes || 1)).toFixed(2)),
+    pickupLat: ride.pickupLat,
+    pickupLng: ride.pickupLng,
+    dropoffLat: ride.dropoffLat,
+    dropoffLng: ride.dropoffLng,
+  }));
+
+  const activeRequests = requests.length > 0 ? requests : apiRequests;
+
+  const handleAcceptRide = async (request: RideRequest) => {
+    clearRequestTimer(request.id);
+    setAcceptError(null);
+    try {
+      if (!request.id.startsWith("req-")) {
+        await apiClient.patch(`/rides/${request.id}/status`, { status: "accepted" });
+        queryClient.invalidateQueries({ queryKey: ["rides"] });
+      }
+    } catch (err: any) {
+      if (err?.response?.status === 409) {
+        setAcceptError("This ride is no longer available.");
+      } else {
+        setAcceptError("Failed to accept ride. Please try again.");
+      }
+      queryClient.invalidateQueries({ queryKey: ["rides", "available"] });
+      return;
+    }
+    router.push({
+      pathname: "/(driver)/navigate-to-pickup",
+      params: {
+        rideId: request.id,
+        name: request.name,
+        rating: String(request.rating),
+        fare: String(request.offer),
+        pickup: request.pickupLabel,
+        dropoff: request.dropoffLabel,
+        pickupLat: request.pickupLat != null ? String(request.pickupLat) : undefined,
+        pickupLng: request.pickupLng != null ? String(request.pickupLng) : undefined,
+        dropoffLat: request.dropoffLat != null ? String(request.dropoffLat) : undefined,
+        dropoffLng: request.dropoffLng != null ? String(request.dropoffLng) : undefined,
+      },
+    });
+  };
+
+  const handleCounterRide = (request: RideRequest) => {
+    clearRequestTimer(request.id);
+    router.push({
+      pathname: "/(driver)/counter-offer",
+      params: {
+        rideId: request.id,
+        initialFare: String(request.offer),
+      },
+    });
+  };
 
   // Consumes a drawer-open request left by a screen outside the Drawer's own tree (currently only
   // active-ride.tsx's menu icon -- see drawer-open-request.ts for why that screen can't dispatch
@@ -170,16 +303,12 @@ export default function DriverDashboardScreen() {
     }, [navigation]),
   );
 
-  // Fixed: the online<->offline swap (and the nested searching<->no-requests swap below) used to
-  // be an instant hard content-swap with zero feedback. Both now cross-fade via
-  // `LayoutAnimation.easeInEaseOut` instead of popping instantly. This effect only fires for the
-  // two external callers (verification-status.tsx, ride-completed.tsx) that still navigate here via
-  // the `status` param; this screen's own Go Online/Go Offline buttons call `setStatus` directly
-  // (see below) and don't round-trip through this param at all.
+  // Cross-fade on status update from external params
   useEffect(() => {
-    if (params.status === "online" || params.status === "offline") {
-      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-      setStatus(params.status);
+    if (params.status === "online") {
+      handleGoOnline();
+    } else if (params.status === "offline") {
+      handleGoOffline();
     }
   }, [params.status]);
 
@@ -233,8 +362,13 @@ export default function DriverDashboardScreen() {
   if (status === "online") {
     return (
       <View className="flex-1 bg-surface">
-        <View className="flex-1 bg-surface-container-low">
-          <View style={{ paddingTop: 20 + insets.top }} className="px-container-margin">
+        <View className="relative flex-1">
+          <NativeMap
+            driverLocation={driverLocation}
+            showsRoutePolyline={false}
+            style={StyleSheet.absoluteFillObject}
+          />
+          <View style={{ paddingTop: 20 + insets.top }} className="px-container-margin z-10">
             <View className="flex-row items-center justify-between rounded-full border border-outline-variant/20 bg-surface p-2 shadow-lg">
               <View className="flex-row items-center gap-3 px-4">
                 <View className="h-3 w-3 rounded-full bg-green-500" />
@@ -243,10 +377,7 @@ export default function DriverDashboardScreen() {
                 </Text>
               </View>
               <Pressable
-                onPress={() => {
-                  LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-                  setStatus("offline");
-                }}
+                onPress={handleGoOffline}
                 className="flex-row items-center gap-2 rounded-full bg-surface-container px-4 py-2 active:scale-95"
               >
                 <MaterialIcons name="power-settings-new" size={16} color={themeColors.onSurfaceVariant} />
@@ -255,33 +386,41 @@ export default function DriverDashboardScreen() {
             </View>
           </View>
 
-          {requests.length > 0 ? (
+          {acceptError ? (
+            <View className="mx-container-margin mt-2 z-10 flex-row items-center justify-between rounded-xl bg-error-container p-3 shadow-md">
+              <View className="flex-1 flex-row items-center gap-2">
+                <MaterialIcons name="error-outline" size={18} color={themeColors.onErrorContainer} />
+                <Text className="flex-1 font-label-sm text-label-sm text-onErrorContainer">
+                  {acceptError}
+                </Text>
+              </View>
+              <Pressable onPress={() => setAcceptError(null)} className="p-1">
+                <MaterialIcons name="close" size={16} color={themeColors.onErrorContainer} />
+              </Pressable>
+            </View>
+          ) : null}
+
+          {locationError && status === "online" ? (
+            <View className="mx-container-margin mt-2 z-10 flex-row items-center gap-2 rounded-xl bg-surface/90 border border-outline-variant/50 p-3 shadow-md">
+              <MaterialIcons name="location-off" size={18} color={themeColors.primary} />
+              <Text className="flex-1 font-label-sm text-label-sm text-on-surface">
+                {locationError}
+              </Text>
+            </View>
+          ) : null}
+
+          {activeRequests.length > 0 ? (
             <ScrollView
               className="mt-3 flex-1"
               contentContainerClassName="gap-3 px-container-margin pb-4"
               showsVerticalScrollIndicator={false}
             >
-              {requests.map((request) => (
+              {activeRequests.map((request) => (
                 <RideRequestCard
                   key={request.id}
                   request={request}
-                  onAccept={() => {
-                    clearRequestTimer(request.id);
-                    router.push({
-                      pathname: "/(driver)/navigate-to-pickup",
-                      params: {
-                        name: request.name,
-                        rating: String(request.rating),
-                        fare: String(request.offer),
-                        pickup: request.pickupLabel,
-                        dropoff: request.dropoffLabel,
-                      },
-                    });
-                  }}
-                  onCounter={() => {
-                    clearRequestTimer(request.id);
-                    router.push("/(driver)/counter-offer");
-                  }}
+                  onAccept={() => handleAcceptRide(request)}
+                  onCounter={() => handleCounterRide(request)}
                   onReject={() => removeRequest(request.id)}
                 />
               ))}
@@ -389,12 +528,10 @@ export default function DriverDashboardScreen() {
 
       <View className="relative flex-1">
         <View className="absolute inset-0 z-0 overflow-hidden bg-surface-variant/50">
-          <Image
-            source={{
-              uri: "https://lh3.googleusercontent.com/aida-public/AB6AXuCFyWmsppKp780nLLlL3AsgX2qtpTgOD1yJv761joNOqSnPBw6HRlT_ndHUdE8JrGlEI95RpLtYmz53Cko5COeKB4qYguYETwq9Uhp06DrwBph4bikKNamU4tNrTbQV-6ofR_9rWI1NlAuR3OqjDx2CI32zLY6Sy37zgynZFC2CIxoep3KV3UlVxZzAFVQVvVVdp9RwEwt4nd0qiZLmNTURNAakTjOxsTtSqaMH3MwArnGgEp8xqWJQ",
-            }}
-            resizeMode="cover"
-            className="h-full w-full opacity-70"
+          <NativeMap
+            driverLocation={driverLocation}
+            showsRoutePolyline={false}
+            style={StyleSheet.absoluteFillObject}
           />
           <BlurView
             intensity={20}
@@ -426,10 +563,7 @@ export default function DriverDashboardScreen() {
 
           <View className="w-full max-w-md px-container-margin pb-stack-md">
             <Pressable
-              onPress={() => {
-                LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-                setStatus("online");
-              }}
+              onPress={handleGoOnline}
               className="w-full flex-row items-center justify-center gap-3 rounded-xl bg-primary py-4 shadow-sm active:scale-[0.98]"
             >
               <MaterialIcons name="power-settings-new" size={24} color={themeColors.onPrimary} />

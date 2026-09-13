@@ -1,43 +1,99 @@
-import { useState } from "react";
-import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { useEffect, useState } from "react";
+import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { themeColors } from "@/constants/theme-colors";
-
-// Standalone profile-edit screen for the Account tab's "Personal Information" row. Distinct from
-// register-personal-info.tsx on purpose: that screen is step 2 of the 10-step sign-up wizard (its
-// own "Continue" button pushes on to the next onboarding step, has a step-progress bar, etc.), so
-// reusing it here dropped an already-registered driver back into the middle of onboarding with no
-// way out except backing out of the whole stack. This screen instead just edits the fields and
-// returns to Account on save.
-//
-// No backend to persist to yet -- "Save" updates local state and pops back, matching this project's
-// existing "frontend-only, functional in the UI" pattern for screens with no wired API (e.g. the
-// Settings screen's notification toggles).
+import { useDriverProfile, useUpdateDriverProfile } from "@/hooks/use-driver-profile";
+import { getApiErrorMessage } from "@/lib/api-client";
 
 type FieldKey = "name" | "phone" | "email" | "address";
 
 export default function EditPersonalInfoScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const [name, setName] = useState("Marcus T.");
-  const [phone, setPhone] = useState("+1 (555) 123-4567");
-  const [email, setEmail] = useState("alex.thompson@example.com");
+  const { data: profile, isLoading } = useDriverProfile();
+  const updateProfileMutation = useUpdateDriverProfile();
+
+  const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
   const [address, setAddress] = useState("");
   const [saved, setSaved] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const fields: { key: FieldKey; label: string; icon: keyof typeof MaterialIcons.glyphMap; value: string; setValue: (v: string) => void; keyboardType?: "default" | "phone-pad" | "email-address"; multiline?: boolean }[] = [
-    { key: "name", label: "Full Legal Name", icon: "person", value: name, setValue: setName },
-    { key: "phone", label: "Phone Number", icon: "phone", value: phone, setValue: setPhone, keyboardType: "phone-pad" },
-    { key: "email", label: "Email Address", icon: "email", value: email, setValue: setEmail, keyboardType: "email-address" },
-    { key: "address", label: "Home Address", icon: "home", value: address, setValue: setAddress, multiline: true },
+  useEffect(() => {
+    if (profile) {
+      setName(profile.name || "");
+      setPhone(profile.phone || "");
+      setEmail(profile.email || "");
+    }
+  }, [profile]);
+
+  const fields: {
+    key: FieldKey;
+    label: string;
+    icon: keyof typeof MaterialIcons.glyphMap;
+    value: string;
+    setValue: (v: string) => void;
+    keyboardType?: "default" | "phone-pad" | "email-address";
+    multiline?: boolean;
+    editable?: boolean;
+    helper?: string;
+  }[] = [
+    {
+      key: "name",
+      label: "Full Legal Name",
+      icon: "person",
+      value: name,
+      setValue: setName,
+      editable: true,
+    },
+    {
+      key: "phone",
+      label: "Phone Number (Verified)",
+      icon: "phone",
+      value: phone,
+      setValue: setPhone,
+      keyboardType: "phone-pad",
+      editable: false,
+      helper: "Phone number is verified during registration.",
+    },
+    {
+      key: "email",
+      label: "Email Address",
+      icon: "email",
+      value: email,
+      setValue: setEmail,
+      keyboardType: "email-address",
+      editable: false,
+      helper: "Email is linked to your driver login.",
+    },
+    {
+      key: "address",
+      label: "Home Address",
+      icon: "home",
+      value: address,
+      setValue: setAddress,
+      multiline: true,
+      editable: true,
+    },
   ];
 
-  const handleSave = () => {
-    setSaved(true);
-    setTimeout(() => router.back(), 500);
+  const handleSave = async () => {
+    if (!name.trim()) {
+      setErrorMessage("Legal name cannot be empty.");
+      return;
+    }
+    setErrorMessage(null);
+    try {
+      await updateProfileMutation.mutateAsync({ name: name.trim() });
+      setSaved(true);
+      setTimeout(() => router.back(), 800);
+    } catch (err) {
+      setErrorMessage(getApiErrorMessage(err, "Failed to update profile. Please try again."));
+    }
   };
 
   return (
@@ -61,16 +117,25 @@ export default function EditPersonalInfoScreen() {
         className="flex-1"
         contentContainerClassName="mx-auto w-full max-w-4xl gap-stack-md px-container-margin py-stack-md pb-32"
       >
+        {errorMessage ? (
+          <View className="flex-row items-center gap-2 rounded-xl border border-error bg-error-container/20 p-4">
+            <MaterialIcons name="error-outline" size={20} color={themeColors.error} />
+            <Text className="flex-1 font-body-md text-sm text-error">{errorMessage}</Text>
+          </View>
+        ) : null}
+
         {fields.map((field) => (
           <View key={field.key} className="gap-base">
             <Text className="font-label-sm text-label-sm text-on-surface-variant">
               {field.label}
             </Text>
-            <View className="relative rounded-lg border border-outline-variant bg-surface-container-lowest">
-              {/* Fixed: className used to interpolate the multiline-dependent position/alignment
-                  into a template literal -- the same NativeWind runtime anti-pattern root-caused on
-                  login.tsx's phone/email toggle. className is now static; the position difference
-                  moves to a plain `style` prop instead. */}
+            <View
+              className={`relative rounded-lg border border-outline-variant ${
+                field.editable === false
+                  ? "bg-surface-container/50 opacity-80"
+                  : "bg-surface-container-lowest"
+              }`}
+            >
               <View
                 className="absolute left-0 z-10 pl-4"
                 style={
@@ -90,8 +155,12 @@ export default function EditPersonalInfoScreen() {
                 textAlignVertical={field.multiline ? "top" : undefined}
                 placeholder={field.multiline ? "Enter your full residential address" : undefined}
                 placeholderTextColor={themeColors.outline}
+                editable={field.editable !== false}
               />
             </View>
+            {field.helper ? (
+              <Text className="text-xs text-on-surface-variant">{field.helper}</Text>
+            ) : null}
           </View>
         ))}
       </ScrollView>
@@ -99,16 +168,26 @@ export default function EditPersonalInfoScreen() {
       <View className="absolute bottom-0 left-0 z-40 w-full border-t border-surface-container-high bg-surface p-4">
         <Pressable
           onPress={handleSave}
+          disabled={updateProfileMutation.isPending || saved}
           className="min-h-[56px] w-full flex-row items-center justify-center gap-2 rounded-xl bg-primary py-4 active:scale-[0.98]"
+          style={{ opacity: updateProfileMutation.isPending ? 0.7 : 1 }}
         >
-          <MaterialIcons
-            name={saved ? "check" : "save"}
-            size={18}
-            color={themeColors.onPrimary}
-          />
-          <Text className="font-label-sm text-label-sm text-on-primary">
-            {saved ? "Saved" : "Save Changes"}
-          </Text>
+          {updateProfileMutation.isPending ? (
+            <>
+              <ActivityIndicator size="small" color={themeColors.onPrimary} />
+              <Text className="font-label-sm text-label-sm text-on-primary">Saving...</Text>
+            </>
+          ) : saved ? (
+            <>
+              <MaterialIcons name="check" size={18} color={themeColors.onPrimary} />
+              <Text className="font-label-sm text-label-sm text-on-primary">Saved</Text>
+            </>
+          ) : (
+            <>
+              <MaterialIcons name="save" size={18} color={themeColors.onPrimary} />
+              <Text className="font-label-sm text-label-sm text-on-primary">Save Changes</Text>
+            </>
+          )}
         </Pressable>
       </View>
     </View>

@@ -11,10 +11,38 @@ const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL ?? "http://localhost:3
 // any screen actually stored a token -- now it's real).
 export const ACCESS_TOKEN_KEY = "driverAuthToken";
 export const REFRESH_TOKEN_KEY = "driverRefreshToken";
+export const AUTH_USER_KEY = "driverAuthUser";
 
-export async function storeAuthTokens(accessToken: string, refreshToken: string) {
+export interface StoredAuthUser {
+  id?: string;
+  role: "driver" | "passenger";
+  verificationStatus?: "pending" | "approved" | "rejected";
+}
+
+export async function storeAuthTokens(
+  accessToken: string,
+  refreshToken: string,
+  user?: StoredAuthUser,
+) {
   await SecureStore.setItemAsync(ACCESS_TOKEN_KEY, accessToken);
   await SecureStore.setItemAsync(REFRESH_TOKEN_KEY, refreshToken);
+  if (user) {
+    await SecureStore.setItemAsync(AUTH_USER_KEY, JSON.stringify(user));
+  }
+}
+
+export async function storeAuthUser(user: StoredAuthUser) {
+  await SecureStore.setItemAsync(AUTH_USER_KEY, JSON.stringify(user));
+}
+
+export async function getAuthUser(): Promise<StoredAuthUser | null> {
+  const raw = await SecureStore.getItemAsync(AUTH_USER_KEY);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as StoredAuthUser;
+  } catch {
+    return null;
+  }
 }
 
 export async function getAccessToken() {
@@ -28,6 +56,7 @@ export async function getRefreshToken() {
 export async function clearAuthTokens() {
   await SecureStore.deleteItemAsync(ACCESS_TOKEN_KEY);
   await SecureStore.deleteItemAsync(REFRESH_TOKEN_KEY);
+  await SecureStore.deleteItemAsync(AUTH_USER_KEY);
 }
 
 export const apiClient = axios.create({ baseURL: API_BASE_URL });
