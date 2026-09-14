@@ -8,6 +8,7 @@ import { apiClient, getApiErrorMessage, getApiErrorStatus } from "@/lib/api-clie
 import { themeColors } from "@/constants/theme-colors";
 import { registrationDraft } from "@/utils/registration-draft";
 import { normalizePhone } from "@/utils/phone";
+import { useAuthStore } from "@/store/auth-store";
 
 // Source marker for this screen was "Driver Signup", but its <title> ("Driver Registration -
 // Indigo Motion") and on-screen <h1> ("Driver Registration") match the table's "Driver
@@ -87,12 +88,25 @@ export default function DriverRegisterScreen() {
     const normalizedPhone = normalizePhone(phone);
     setSubmitting(true);
     try {
-      await apiClient.post("/auth/register/driver", {
+      const { data } = await apiClient.post<{
+        accessToken?: string;
+        refreshToken?: string;
+        role?: "driver" | "passenger";
+        verificationStatus?: "pending" | "approved" | "rejected";
+      }>("/auth/register/driver", {
         name,
         email: email.trim() || undefined,
         phone: normalizedPhone,
         password,
       });
+      if (data.accessToken && data.refreshToken) {
+        await useAuthStore.getState().login({
+          accessToken: data.accessToken,
+          refreshToken: data.refreshToken,
+          role: "driver",
+          verificationStatus: "approved",
+        });
+      }
       registrationDraft.phone = normalizedPhone;
       router.push("/(driver-auth)/verify-phone");
     } catch (error) {

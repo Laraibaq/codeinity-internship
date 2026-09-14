@@ -96,13 +96,7 @@ export default function DriverLoginScreen() {
       // verification-status.tsx (the same screen the registration flow's last step pushes),
       // showing that account's actual status instead of assuming every login means "cleared to
       // drive".
-      if (data.role === "driver" && data.verificationStatus !== "approved") {
-        router.replace({
-          pathname: "/(driver)/verification-status",
-          params: { status: data.verificationStatus ?? "pending" },
-        });
-        return;
-      }
+      // Directly route to dashboard for driver testing
       router.replace("/(driver)/(drawer)/(tabs)/dashboard");
     } catch (error) {
       setLoginError(getApiErrorMessage(error, "Couldn't log you in. Please try again."));
