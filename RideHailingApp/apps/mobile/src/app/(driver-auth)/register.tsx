@@ -8,6 +8,7 @@ import { apiClient, getApiErrorMessage, getApiErrorStatus } from "@/lib/api-clie
 import { themeColors } from "@/constants/theme-colors";
 import { registrationDraft } from "@/utils/registration-draft";
 import { normalizePhone } from "@/utils/phone";
+import { PhoneInput } from "@/components/phone-input";
 
 // Source marker for this screen was "Driver Signup", but its <title> ("Driver Registration -
 // Indigo Motion") and on-screen <h1> ("Driver Registration") match the table's "Driver
@@ -65,6 +66,7 @@ export default function DriverRegisterScreen() {
   const insets = useSafeAreaInsets();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [countryCode, setCountryCode] = useState("1");
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -84,7 +86,7 @@ export default function DriverRegisterScreen() {
     setFormError(null);
     setPhoneError(null);
 
-    const normalizedPhone = normalizePhone(phone);
+    const normalizedPhone = normalizePhone(phone, countryCode);
     setSubmitting(true);
     try {
       await apiClient.post("/auth/register/driver", {
@@ -190,24 +192,22 @@ export default function DriverRegisterScreen() {
             <Text className="font-label-sm text-label-sm text-on-surface-variant">
               PHONE NUMBER
             </Text>
-            <View className="relative">
-              <View className="absolute inset-y-0 left-0 z-10 justify-center pl-4" pointerEvents="none">
-                <MaterialIcons name="call" size={16} color={themeColors.onSurfaceVariant} />
-              </View>
-              <TextInput
-                className="min-h-[46px] rounded-lg border border-transparent bg-surface-container-low pl-12 pr-4 font-body-md text-body-md text-on-surface focus:border-primary focus:bg-surface-container-lowest"
-                placeholder="(555) 000-0000"
-                keyboardType="phone-pad"
-                value={phone}
-                onChangeText={(value) => {
-                  setPhone(value);
-                  setPhoneError(null);
-                }}
-              />
-            </View>
-            {phoneError ? (
-              <Text className="mt-1 font-label-sm text-label-sm text-error">{phoneError}</Text>
-            ) : null}
+            <PhoneInput
+              countryCode={countryCode}
+              onCountryCodeChange={(code) => {
+                setCountryCode(code);
+                setPhoneError(null);
+              }}
+              phoneNumber={phone}
+              onPhoneNumberChange={(value) => {
+                setPhone(value);
+                setPhoneError(null);
+              }}
+              placeholder="(555) 000-0000"
+              error={phoneError}
+              variant="filled"
+              inputHeight={46}
+            />
           </View>
 
           <View className="gap-1">

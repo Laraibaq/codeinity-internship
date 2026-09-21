@@ -6,11 +6,15 @@ import { RidesService } from './rides.service';
 import { CreateOfferDto, OfferTypeEnum } from './dto/create-offer.dto';
 import { CreateRideDto } from './dto/create-ride.dto';
 import { UpdateRideStatusEnum } from './dto/update-ride-status.dto';
+import { MatchingService } from './matching.service';
+import { RealtimeService } from '../realtime/realtime.service';
 
 describe('RidesService & RidesController (Phase 10 Comprehensive)', () => {
   let ridesService: RidesService;
   let ridesController: RidesController;
   let prisma: any;
+  let matchingService: any;
+  let realtimeService: any;
 
   const mockPassengerId = '11111111-1111-1111-1111-111111111111';
   const mockOtherPassengerId = '22222222-2222-2222-2222-222222222222';
@@ -42,6 +46,7 @@ describe('RidesService & RidesController (Phase 10 Comprehensive)', () => {
       ride: {
         create: jest.fn(),
         findUnique: jest.fn(),
+        findFirst: jest.fn().mockResolvedValue(null),
         findMany: jest.fn(),
         update: jest.fn(),
         updateMany: jest.fn(),
@@ -60,6 +65,13 @@ describe('RidesService & RidesController (Phase 10 Comprehensive)', () => {
       $transaction: jest.fn((cb) => cb(prisma)),
     };
 
+    realtimeService = {
+      emitOfferCreated: jest.fn(),
+      emitOfferUpdated: jest.fn(),
+      emitRideAccepted: jest.fn(),
+      emitRideStatusChanged: jest.fn(),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       controllers: [RidesController],
       providers: [
@@ -68,8 +80,20 @@ describe('RidesService & RidesController (Phase 10 Comprehensive)', () => {
           provide: PrismaService,
           useValue: prisma,
         },
+        {
+          provide: MatchingService,
+          useValue: {
+            matchRide: jest.fn().mockResolvedValue({ matchedDriversCount: 0, offers: [] }),
+            findEligibleNearbyDrivers: jest.fn().mockResolvedValue([]),
+          },
+        },
+        {
+          provide: RealtimeService,
+          useValue: realtimeService,
+        },
       ],
     }).compile();
+
 
     ridesService = module.get<RidesService>(RidesService);
     ridesController = module.get<RidesController>(RidesController);
@@ -279,7 +303,9 @@ describe('RidesService & RidesController (Phase 10 Comprehensive)', () => {
         passengerId: mockPassengerId,
         status: 'offered',
         proposedFare: 20.0,
+        driverId: null,
       });
+
       prisma.rideOffer.findUnique.mockResolvedValue({
         id: mockOfferId,
         rideId: mockRideId,

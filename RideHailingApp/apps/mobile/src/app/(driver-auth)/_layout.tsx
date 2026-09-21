@@ -24,5 +24,9 @@ export default function DriverAuthLayout() {
     return <Redirect href="/(driver)/verification-status" />;
   }
 
+  if (isAuthenticated && role === "passenger") {
+    return <Redirect href="/(passenger)/home" />;
+  }
+
   return <Stack screenOptions={{ headerShown: false }} />;
 }

@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { LayoutAnimation, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
-import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import { BlurView } from "expo-blur";
-import { DrawerActions, useFocusEffect } from "@react-navigation/native";
+import { DrawerActions } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -13,51 +13,13 @@ import { formatCurrency } from "@/utils/currency";
 import { RideRequestCard, type RideRequest } from "@/components/ride-request-card";
 import { consumeDrawerOpenRequest } from "@/utils/drawer-open-request";
 import { apiClient } from "@/lib/api-client";
+import { socketClient } from "@/lib/realtime/socket-client";
 import { NativeMap } from "@/components/native-map";
 import { useLocationStore } from "@/store/location-store";
 
 type DriverStatus = "online" | "offline";
 type OnlineView = "searching" | "no-requests";
 
-// Mock pool for the "DEV: Simulate Request" button below -- cycled through so multiple simultaneous
-// requests (the whole point of Part 1's inline-card row) look distinct from each other rather than
-// all being the same passenger repeated. Same fictitious ride data ("Sarah J.", Pier 39 dropoff)
-// already used elsewhere in this flow (was ride-request-notification.tsx's), plus two more variants.
-const SAMPLE_REQUESTS: Omit<RideRequest, "id">[] = [
-  {
-    name: "Sarah J.",
-    rating: 4.9,
-    offer: 15,
-    pickupLabel: "1450 Market Street",
-    pickupMeta: "2 min (0.8 mi)",
-    dropoffLabel: "Pier 39, Fisherman's Wharf",
-    dropoffMeta: "12 min (3.2 mi)",
-    totalMinutes: 14,
-    ratePerMin: 1.07,
-  },
-  {
-    name: "Marcus T.",
-    rating: 4.7,
-    offer: 22,
-    pickupLabel: "Union Square",
-    pickupMeta: "4 min (1.5 mi)",
-    dropoffLabel: "SFO Terminal 2",
-    dropoffMeta: "22 min (14.1 mi)",
-    totalMinutes: 26,
-    ratePerMin: 0.85,
-  },
-  {
-    name: "Priya K.",
-    rating: 5.0,
-    offer: 11,
-    pickupLabel: "Golden Gate Park",
-    pickupMeta: "3 min (1.1 mi)",
-    dropoffLabel: "Painted Ladies",
-    dropoffMeta: "9 min (2.4 mi)",
-    totalMinutes: 12,
-    ratePerMin: 0.92,
-  },
-];
 
 // This screen merges two separate source mockups ("Driver Home - Online" and "Driver Home -
 // Offline") into one stateful screen, per this batch's Part 1 instructions. `status` drives which
@@ -108,19 +70,9 @@ const SAMPLE_REQUESTS: Omit<RideRequest, "id">[] = [
 // ROOT screen with no real back destination, and guessing at a `router.back()` here could pop out
 // of the tab navigator into an unrelated screen -- a worse outcome than a dead button.
 //
-// Dev-only placeholders (flagged for removal): the "Simulate Request" and "Simulate No Requests"
-// buttons below only exist because this app has no real-time transport wired up yet. Per
-// Dependencies.docx §6, incoming ride requests should arrive over a Socket.IO `ride:new-request`
-// event; once that listener (and whatever decides there's nothing nearby) exists, it should drive
-// `requests`/`onlineView` itself, and both buttons should be deleted entirely.
-//
-// `onlineView` ('searching' | 'no-requests'), nested inside the "online" branch: this only controls
-// which overlay shows when `requests` is empty. "Simulate Request" appends a mock request to
-// `requests` (and flips `onlineView` back to "searching" in case it was on "no-requests") instead of
-// opening the old ride-request-notification.tsx popup, since Part 1 retired that screen in favor of
-// inline cards. "Simulate No Requests" now clears `requests` and flips `onlineView` to "no-requests",
-// preserving that richer empty state (heatmap zones, "Navigate to hotspot") as still reachable rather
-// than deleting it outright.
+// Real-time queries: incoming available rides are fetched from /rides/available and driver offers,
+// filtering out any requests the driver dismissed in the current session.
+
 //
 // Fixed (Part 1): incoming requests used to open ride-request-notification.tsx as a
 // transparentModal, with a further push to ride-request-detail.tsx on tapping the card. Both screens
@@ -176,10 +128,10 @@ export default function DriverDashboardScreen() {
   const params = useLocalSearchParams<{ status?: string }>();
   const [status, setStatus] = useState<DriverStatus>("offline");
   const [onlineView, setOnlineView] = useState<OnlineView>("searching");
-  const [requests, setRequests] = useState<RideRequest[]>([]);
+  const [dismissedRequestIds, setDismissedRequestIds] = useState<Set<string>>(new Set());
   const [acceptError, setAcceptError] = useState<string | null>(null);
-  const nextSampleIndex = useRef(0);
   const requestTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+
 
   const {
     latitude: driverLat,
@@ -227,6 +179,33 @@ export default function DriverDashboardScreen() {
     refetchInterval: status === "online" ? 5000 : false,
   });
 
+  // Realtime Socket.IO listener for live ride/offer delivery
+  useEffect(() => {
+    if (status !== "online") return;
+
+    let isMounted = true;
+    socketClient.connect();
+
+    const handleRideUpdate = () => {
+      if (isMounted) {
+        queryClient.invalidateQueries({ queryKey: ["rides", "available"] });
+      }
+    };
+
+    const unsubOfferCreated = socketClient.on("ride:offer-created", handleRideUpdate);
+    const unsubOfferUpdated = socketClient.on("ride:offer-updated", handleRideUpdate);
+    const unsubRideAccepted = socketClient.on("ride:accepted", handleRideUpdate);
+    const unsubStatusChanged = socketClient.on("ride:status-changed", handleRideUpdate);
+
+    return () => {
+      isMounted = false;
+      unsubOfferCreated();
+      unsubOfferUpdated();
+      unsubRideAccepted();
+      unsubStatusChanged();
+    };
+  }, [status, queryClient]);
+
   const apiRequests: RideRequest[] = (availableRides || []).map((ride) => ({
     id: ride.id,
     name: ride.passenger?.name || "Passenger",
@@ -244,7 +223,7 @@ export default function DriverDashboardScreen() {
     dropoffLng: ride.dropoffLng,
   }));
 
-  const activeRequests = requests.length > 0 ? requests : apiRequests;
+  const activeRequests = apiRequests.filter((req) => !dismissedRequestIds.has(req.id));
 
   const handleAcceptRide = async (request: RideRequest) => {
     clearRequestTimer(request.id);
@@ -331,7 +310,7 @@ export default function DriverDashboardScreen() {
   const removeRequest = (id: string) => {
     clearRequestTimer(id);
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setRequests((current) => current.filter((request) => request.id !== id));
+    setDismissedRequestIds((prev) => new Set(prev).add(id));
   };
 
   const startRequestTimer = (id: string) => {
@@ -341,23 +320,6 @@ export default function DriverDashboardScreen() {
     );
   };
 
-  const handleSimulateRequest = () => {
-    const sample = SAMPLE_REQUESTS[nextSampleIndex.current % SAMPLE_REQUESTS.length];
-    nextSampleIndex.current += 1;
-    const id = `req-${Date.now()}-${nextSampleIndex.current}`;
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setOnlineView("searching");
-    setRequests((current) => [...current, { ...sample, id }]);
-    startRequestTimer(id);
-  };
-
-  const handleSimulateNoRequests = () => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    requestTimers.current.forEach((timer) => clearTimeout(timer));
-    requestTimers.current.clear();
-    setRequests([]);
-    setOnlineView("no-requests");
-  };
 
   if (status === "online") {
     return (
@@ -482,32 +444,12 @@ export default function DriverDashboardScreen() {
               </View>
             </View>
           )}
-
-          <View
-            style={{ paddingBottom: 16 + insets.bottom }}
-            className="gap-2 px-container-margin pt-2"
-          >
-            <Pressable
-              onPress={handleSimulateRequest}
-              className="w-full items-center justify-center rounded-lg bg-primary py-3 shadow-sm active:scale-95"
-            >
-              <Text className="font-label-sm text-label-sm text-on-primary">
-                DEV: Simulate Request
-              </Text>
-            </Pressable>
-            <Pressable
-              onPress={handleSimulateNoRequests}
-              className="w-full items-center justify-center rounded-lg border border-outline-variant bg-surface py-3 active:scale-95"
-            >
-              <Text className="font-label-sm text-label-sm text-on-surface">
-                DEV: Simulate No Requests
-              </Text>
-            </Pressable>
-          </View>
         </View>
       </View>
     );
   }
+
+
 
   return (
     <View className="flex-1 bg-background">

@@ -8,6 +8,7 @@ import { DriversModule } from './drivers/drivers.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { RatingsModule } from './ratings/ratings.module';
+import { RealtimeModule } from './realtime/realtime.module';
 import { RidesModule } from './rides/rides.module';
 import { SupabaseModule } from './supabase/supabase.module';
 import { SupportModule } from './support/support.module';
@@ -26,6 +27,7 @@ import { SupportModule } from './support/support.module';
     AuthModule,
     DriversModule,
     RidesModule,
+    RealtimeModule,
     RatingsModule,
     SupportModule,
     NotificationsModule,

@@ -9,6 +9,7 @@ import { useAuthStore } from "@/store/auth-store";
 import { themeColors } from "@/constants/theme-colors";
 import { LoginMethodToggle } from "@/components/login-method-toggle";
 import { normalizePhone } from "@/utils/phone";
+import { PhoneInput } from "@/components/phone-input";
 
 // Fixed: this screen had no header/back arrow at all, unlike every other (driver-auth) screen --
 // added the same h-16 back-arrow + title header pattern used throughout this project, wired to
@@ -71,6 +72,7 @@ export default function DriverLoginScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [loginMethod, setLoginMethod] = useState<"phone" | "email">("phone");
+  const [countryCode, setCountryCode] = useState("1");
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [loginError, setLoginError] = useState<string | null>(null);
@@ -82,7 +84,7 @@ export default function DriverLoginScreen() {
     setSubmitting(true);
     try {
       const normalizedIdentifier =
-        loginMethod === "phone" ? normalizePhone(identifier) : identifier.trim();
+        loginMethod === "phone" ? normalizePhone(identifier, countryCode) : identifier.trim();
       const { data } = await apiClient.post<{
         accessToken: string;
         refreshToken: string;
@@ -156,25 +158,43 @@ export default function DriverLoginScreen() {
           <View className="gap-stack-md">
             <LoginMethodToggle value={loginMethod} onChange={setLoginMethod} />
 
-            <View className="h-[56px] flex-row items-center rounded-lg bg-surface-container-low px-gutter">
-              <MaterialIcons
-                name={loginMethod === "phone" ? "call" : "email"}
-                size={16}
-                color={themeColors.onSurfaceVariant}
-                style={{ marginRight: 8 }}
-              />
-              <TextInput
-                className="h-full flex-1 bg-transparent font-body-md text-body-md text-on-surface"
-                placeholder={loginMethod === "phone" ? "Phone Number" : "Email Address"}
-                keyboardType={loginMethod === "phone" ? "phone-pad" : "email-address"}
-                autoCapitalize="none"
-                value={identifier}
-                onChangeText={(value) => {
+            {loginMethod === "phone" ? (
+              <PhoneInput
+                countryCode={countryCode}
+                onCountryCodeChange={(code) => {
+                  setCountryCode(code);
+                  setLoginError(null);
+                }}
+                phoneNumber={identifier}
+                onPhoneNumberChange={(value) => {
                   setIdentifier(value);
                   setLoginError(null);
                 }}
+                placeholder="Phone Number"
+                variant="filled"
+                inputHeight={56}
               />
-            </View>
+            ) : (
+              <View className="h-[56px] flex-row items-center rounded-lg bg-surface-container-low px-gutter">
+                <MaterialIcons
+                  name="email"
+                  size={16}
+                  color={themeColors.onSurfaceVariant}
+                  style={{ marginRight: 8 }}
+                />
+                <TextInput
+                  className="h-full flex-1 bg-transparent font-body-md text-body-md text-on-surface"
+                  placeholder="Email Address"
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  value={identifier}
+                  onChangeText={(value) => {
+                    setIdentifier(value);
+                    setLoginError(null);
+                  }}
+                />
+              </View>
+            )}
 
             <View className="h-[56px] flex-row items-center rounded-lg bg-surface-container-low px-gutter">
               <MaterialIcons

@@ -9,6 +9,7 @@ import { themeColors } from "@/constants/theme-colors";
 import { LoginMethodToggle, type LoginMethod } from "@/components/login-method-toggle";
 import { passwordResetDraft } from "@/utils/password-reset-draft";
 import { normalizePhone } from "@/utils/phone";
+import { PhoneInput } from "@/components/phone-input";
 
 // Restored to the screen's original structure/copy (see git history: commit 2c423f6, "August") after
 // several turns of layout changes had accumulated on top of it. The only two carryovers kept from
@@ -53,6 +54,7 @@ export default function DriverForgotPasswordScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [method, setMethod] = useState<LoginMethod>("phone");
+  const [countryCode, setCountryCode] = useState("1");
   const [value, setValue] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -62,7 +64,7 @@ export default function DriverForgotPasswordScreen() {
   // comment), so this always proceeds to the code-entry screen rather than branching on a
   // found/not-found response that would leak account existence.
   const handleSendCode = async () => {
-    const identifier = method === "phone" ? normalizePhone(value) : value.trim();
+    const identifier = method === "phone" ? normalizePhone(value, countryCode) : value.trim();
     if (!identifier) {
       setFormError(method === "phone" ? "Enter a phone number." : "Enter an email address.");
       return;
@@ -74,7 +76,7 @@ export default function DriverForgotPasswordScreen() {
       passwordResetDraft.identifier = identifier;
       router.push({
         pathname: "/(driver-auth)/reset-password-verify",
-        params: { method, value },
+        params: { method, value: identifier },
       });
     } catch (error) {
       setFormError(getApiErrorMessage(error, "Couldn't send a code. Please try again."));
@@ -129,19 +131,15 @@ export default function DriverForgotPasswordScreen() {
                 <Text className="mb-base font-label-sm text-label-sm text-on-surface-variant">
                   Phone Number
                 </Text>
-                <View className="flex-row">
-                  <View className="items-center justify-center rounded-l-lg border border-r-0 border-outline-variant bg-surface-container-low px-4">
-                    <Text className="text-on-surface-variant">+1</Text>
-                  </View>
-                  <TextInput
-                    className="min-w-0 flex-1 rounded-r-lg border border-outline-variant bg-surface px-4 py-4 font-body-md text-body-md text-on-surface focus:border-primary"
-                    placeholder="(555) 000-0000"
-                    placeholderTextColor={themeColors.outline}
-                    keyboardType="phone-pad"
-                    value={value}
-                    onChangeText={setValue}
-                  />
-                </View>
+                <PhoneInput
+                  countryCode={countryCode}
+                  onCountryCodeChange={setCountryCode}
+                  phoneNumber={value}
+                  onPhoneNumberChange={setValue}
+                  placeholder="(555) 000-0000"
+                  variant="outline"
+                  inputHeight={52}
+                />
               </View>
             ) : (
               <View className="relative">

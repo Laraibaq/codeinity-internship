@@ -11,9 +11,16 @@ import { CreateRideDto } from './dto/create-ride.dto';
 import { CreateOfferDto, OfferTypeEnum } from './dto/create-offer.dto';
 import { UpdateRideStatusDto, UpdateRideStatusEnum } from './dto/update-ride-status.dto';
 
+import { MatchingService, calculateHaversineDistanceKm } from './matching.service';
+import { RealtimeService } from '../realtime/realtime.service';
+
 @Injectable()
 export class RidesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly matchingService: MatchingService,
+    private readonly realtimeService: RealtimeService,
+  ) {}
 
   async createRide(passengerId: string, dto: CreateRideDto) {
     const passenger = await this.prisma.user.findUnique({
@@ -25,7 +32,7 @@ export class RidesService {
 
     const aiRecommendedFare = dto.aiRecommendedFare ?? dto.proposedFare;
 
-    return this.prisma.ride.create({
+    const ride = await this.prisma.ride.create({
       data: {
         passengerId,
         pickupLat: dto.pickupLat,
@@ -52,6 +59,20 @@ export class RidesService {
         },
       },
     });
+
+    // Automatically initiate matching for nearby eligible drivers
+    try {
+      await this.matchingService.matchRide(ride.id);
+    } catch (err) {
+      // Matching errors should not fail ride creation
+      console.warn(`Initial driver matching failed for ride ${ride.id}:`, err);
+    }
+
+    return ride;
+  }
+
+  async matchRide(rideId: string) {
+    return this.matchingService.matchRide(rideId);
   }
 
   async getRideById(rideId: string, user: JwtPayload) {
@@ -216,6 +237,36 @@ export class RidesService {
         where: { id: rideId },
         data: { status: 'offered' },
       });
+      try {
+        this.realtimeService.emitRideStatusChanged(
+          { rideId, status: 'offered' },
+          { passengerId: ride.passengerId },
+        );
+      } catch (err) {
+        // Log and continue
+      }
+    }
+
+    try {
+      this.realtimeService.emitOfferCreated(
+        {
+          rideId,
+          offerId: offer.id,
+          driverId,
+          status: offer.status,
+          pickupAddress: ride.pickupAddress,
+          dropoffAddress: ride.dropoffAddress,
+          proposedFare: Number(offer.offerAmount),
+          expiresAt: offer.expiresAt,
+          driverName: offer.driver?.name,
+          driverRating: offer.driver?.rating != null ? Number(offer.driver.rating) : undefined,
+          vehicleModel: offer.driver?.vehicle?.model || undefined,
+          vehiclePlate: offer.driver?.vehicle?.registrationNumber || undefined,
+        },
+        { driverId, passengerId: ride.passengerId },
+      );
+    } catch (err) {
+      // Log and continue
     }
 
     return offer;
@@ -227,12 +278,26 @@ export class RidesService {
       throw new NotFoundException('Ride not found');
     }
 
+    // Auto-expire outdated pending offers for this ride
+    await this.prisma.rideOffer.updateMany({
+      where: {
+        rideId,
+        status: 'pending',
+        expiresAt: { lt: new Date() },
+      },
+      data: { status: 'expired' },
+    });
+
     if (user.role === 'passenger') {
       if (ride.passengerId !== user.sub) {
         throw new ForbiddenException('You cannot access offers for another passenger\'s ride');
       }
-      return this.prisma.rideOffer.findMany({
-        where: { rideId },
+
+      const offers = await this.prisma.rideOffer.findMany({
+        where: {
+          rideId,
+          status: { in: ['pending', 'accepted'] },
+        },
         include: {
           driver: {
             select: {
@@ -240,10 +305,49 @@ export class RidesService {
               name: true,
               phone: true,
               rating: true,
+              profilePhotoUrl: true,
+              currentLat: true,
+              currentLng: true,
               vehicle: true,
             },
           },
         },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      return offers.map((offer) => {
+        let dist = 1.0;
+        if (offer.driver.currentLat != null && offer.driver.currentLng != null) {
+          dist = calculateHaversineDistanceKm(
+            ride.pickupLat,
+            ride.pickupLng,
+            offer.driver.currentLat,
+            offer.driver.currentLng,
+          );
+        }
+        const etaMin = Math.max(1, Math.round(dist * 2));
+        const vehicleModel = offer.driver.vehicle
+          ? `${offer.driver.vehicle.make || ''} ${offer.driver.vehicle.model || ''}`.trim() || 'Standard'
+          : 'Standard';
+
+        return {
+          id: offer.id,
+          rideId: offer.rideId,
+          driverId: offer.driverId,
+          driverName: offer.driver.name,
+          driverRating: offer.driver.rating ?? 5.0,
+          driverPhotoUrl: offer.driver.profilePhotoUrl ?? undefined,
+          vehicleModel,
+          vehiclePlate: offer.driver.vehicle?.registrationNumber || 'ABC-123',
+          vehicleColor: offer.driver.vehicle?.color ?? undefined,
+          offeredFare: Number(offer.offerAmount ?? ride.proposedFare),
+          distanceKm: dist,
+          estimatedArrivalMinutes: etaMin,
+          status: offer.status,
+          offerType: offer.offerType,
+          expiresAt: offer.expiresAt,
+          createdAt: offer.createdAt,
+        };
       });
     }
 
@@ -281,7 +385,26 @@ export class RidesService {
       throw new BadRequestException('Ride is no longer available to accept offers');
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const offerCheck = await this.prisma.rideOffer.findUnique({ where: { id: offerId } });
+    if (!offerCheck || offerCheck.rideId !== rideId) {
+      throw new NotFoundException('Offer not found for this ride');
+    }
+    if (offerCheck.status !== 'pending') {
+      throw new BadRequestException('Offer is no longer pending');
+    }
+    if (offerCheck.expiresAt < new Date()) {
+      await this.prisma.rideOffer.update({ where: { id: offerId }, data: { status: 'expired' } });
+      throw new BadRequestException('Offer has expired');
+    }
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      // 1. Re-verify ride availability within transaction
+      const currentRide = await tx.ride.findUnique({ where: { id: rideId } });
+      if (!currentRide || (currentRide.status !== 'requested' && currentRide.status !== 'offered') || currentRide.driverId !== null) {
+        throw new ConflictException('Ride is no longer available to accept offers');
+      }
+
+      // 2. Validate offer
       const offer = await tx.rideOffer.findUnique({ where: { id: offerId } });
       if (!offer || offer.rideId !== rideId) {
         throw new NotFoundException('Offer not found for this ride');
@@ -293,11 +416,25 @@ export class RidesService {
         throw new BadRequestException('Offer has expired');
       }
 
+
+      // 3. Verify driver is not occupied with an active ride
+      const occupiedRide = await tx.ride.findFirst({
+        where: {
+          driverId: offer.driverId,
+          status: { in: ['accepted', 'ongoing'] },
+        },
+      });
+      if (occupiedRide) {
+        throw new ConflictException('Driver is currently occupied with another ride');
+      }
+
+      // 4. Update accepted offer
       const acceptedOffer = await tx.rideOffer.update({
         where: { id: offerId },
         data: { status: 'accepted' },
       });
 
+      // 5. Invalidate all other pending offers for this ride
       await tx.rideOffer.updateMany({
         where: {
           rideId,
@@ -307,8 +444,9 @@ export class RidesService {
         data: { status: 'rejected' },
       });
 
-      const finalFare = offer.offerAmount ?? ride.proposedFare;
+      const finalFare = offer.offerAmount ?? currentRide.proposedFare;
 
+      // 6. Assign driver and mark ride accepted
       const updatedRide = await tx.ride.update({
         where: { id: rideId },
         data: {
@@ -339,6 +477,265 @@ export class RidesService {
         ride: updatedRide,
         offer: acceptedOffer,
       };
+    });
+
+    try {
+      this.realtimeService.emitRideAccepted(
+        {
+          rideId,
+          driverId: result.offer.driverId,
+          status: 'accepted',
+          finalFare: Number(result.ride.finalFare),
+        },
+        {
+          passengerId,
+          driverId: result.offer.driverId,
+        },
+      );
+      this.realtimeService.emitOfferUpdated(
+        {
+          rideId,
+          offerId,
+          driverId: result.offer.driverId,
+          status: 'accepted',
+        },
+        {
+          passengerId,
+          driverId: result.offer.driverId,
+        },
+      );
+    } catch (err) {
+      // Log and continue
+    }
+
+    return result;
+  }
+
+  async declineOffer(rideId: string, offerId: string, passengerId: string) {
+    const ride = await this.prisma.ride.findUnique({ where: { id: rideId } });
+    if (!ride) {
+      throw new NotFoundException('Ride not found');
+    }
+    if (ride.passengerId !== passengerId) {
+      throw new ForbiddenException('You can only decline offers for your own ride');
+    }
+
+    const offer = await this.prisma.rideOffer.findUnique({ where: { id: offerId } });
+    if (!offer || offer.rideId !== rideId) {
+      throw new NotFoundException('Offer not found for this ride');
+    }
+
+    const updatedOffer = await this.prisma.rideOffer.update({
+      where: { id: offerId },
+      data: { status: 'rejected' },
+    });
+
+    try {
+      this.realtimeService.emitOfferUpdated(
+        {
+          rideId,
+          offerId,
+          driverId: offer.driverId,
+          status: 'rejected',
+        },
+        {
+          passengerId,
+          driverId: offer.driverId,
+        },
+      );
+    } catch (err) {
+      // Log and continue
+    }
+
+    return updatedOffer;
+  }
+
+  async driverAcceptOffer(driverId: string, rideId: string, offerId: string) {
+    const offer = await this.prisma.rideOffer.findUnique({ where: { id: offerId } });
+    if (!offer || offer.rideId !== rideId) {
+      throw new NotFoundException('Offer not found');
+    }
+    if (offer.driverId !== driverId) {
+      throw new ForbiddenException('You can only accept your own offer');
+    }
+
+    if (offer.status !== 'pending') {
+      throw new BadRequestException('Offer is no longer pending');
+    }
+    if (offer.expiresAt < new Date()) {
+      await this.prisma.rideOffer.update({ where: { id: offerId }, data: { status: 'expired' } });
+      throw new BadRequestException('Offer has expired');
+    }
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      const currentRide = await tx.ride.findUnique({ where: { id: rideId } });
+      if (!currentRide || (currentRide.status !== 'requested' && currentRide.status !== 'offered') || currentRide.driverId !== null) {
+        throw new ConflictException('Ride is no longer available');
+      }
+
+      if (offer.status !== 'pending') {
+        throw new BadRequestException('Offer is no longer pending');
+      }
+      if (offer.expiresAt < new Date()) {
+        throw new BadRequestException('Offer has expired');
+      }
+
+
+      const occupiedRide = await tx.ride.findFirst({
+        where: {
+          driverId,
+          status: { in: ['accepted', 'ongoing'] },
+        },
+      });
+      if (occupiedRide) {
+        throw new ConflictException('Driver is currently occupied with another ride');
+      }
+
+      const acceptedOffer = await tx.rideOffer.update({
+        where: { id: offerId },
+        data: { status: 'accepted' },
+      });
+
+      await tx.rideOffer.updateMany({
+        where: {
+          rideId,
+          id: { not: offerId },
+          status: 'pending',
+        },
+        data: { status: 'rejected' },
+      });
+
+      const finalFare = offer.offerAmount ?? currentRide.proposedFare;
+
+      const updatedRide = await tx.ride.update({
+        where: { id: rideId },
+        data: {
+          status: 'accepted',
+          driverId,
+          finalFare,
+        },
+        include: {
+          passenger: {
+            select: {
+              id: true,
+              name: true,
+              phone: true,
+            },
+          },
+          driver: {
+            select: {
+              id: true,
+              name: true,
+              phone: true,
+              vehicle: true,
+            },
+          },
+        },
+      });
+
+      return {
+        ride: updatedRide,
+        offer: acceptedOffer,
+      };
+    });
+
+    try {
+      this.realtimeService.emitRideAccepted(
+        {
+          rideId,
+          driverId,
+          status: 'accepted',
+          finalFare: Number(result.ride.finalFare),
+        },
+        {
+          passengerId: result.ride.passengerId || (result.ride as any).passenger?.id,
+          driverId,
+        },
+      );
+      this.realtimeService.emitOfferUpdated(
+        {
+          rideId,
+          offerId,
+          driverId,
+          status: 'accepted',
+        },
+        {
+          passengerId: result.ride.passengerId || (result.ride as any).passenger?.id,
+          driverId,
+        },
+      );
+    } catch (err) {
+      // Log and continue
+    }
+
+    return result;
+  }
+
+  async driverRejectOffer(driverId: string, rideId: string, offerId: string) {
+    const offer = await this.prisma.rideOffer.findUnique({ where: { id: offerId } });
+    if (!offer || offer.rideId !== rideId || offer.driverId !== driverId) {
+      throw new NotFoundException('Offer not found for this driver');
+    }
+    const updatedOffer = await this.prisma.rideOffer.update({
+      where: { id: offerId },
+      data: { status: 'rejected' },
+    });
+
+    try {
+      this.realtimeService.emitOfferUpdated(
+        {
+          rideId,
+          offerId,
+          driverId,
+          status: 'rejected',
+        },
+        {
+          driverId,
+        },
+      );
+    } catch (err) {
+      // Log and continue
+    }
+
+    return updatedOffer;
+  }
+
+  async getDriverOffers(driverId: string) {
+    await this.prisma.rideOffer.updateMany({
+      where: {
+        driverId,
+        status: 'pending',
+        expiresAt: { lt: new Date() },
+      },
+      data: { status: 'expired' },
+    });
+
+    return this.prisma.rideOffer.findMany({
+      where: {
+        driverId,
+        status: 'pending',
+        expiresAt: { gt: new Date() },
+        ride: {
+          status: { in: ['requested', 'offered'] },
+          driverId: null,
+        },
+      },
+      include: {
+        ride: {
+          include: {
+            passenger: {
+              select: {
+                id: true,
+                name: true,
+                phone: true,
+                rating: true,
+                profilePhotoUrl: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
     });
   }
 
@@ -374,7 +771,7 @@ export class RidesService {
           throw new ConflictException('Ride is already assigned to another driver');
         }
 
-        return this.prisma.$transaction(async (tx) => {
+        const result = await this.prisma.$transaction(async (tx) => {
           const updateResult = await tx.ride.updateMany({
             where: {
               id: rideId,
@@ -420,6 +817,29 @@ export class RidesService {
             },
           });
         });
+
+        try {
+          this.realtimeService.emitRideAccepted(
+            {
+              rideId,
+              driverId: user.sub,
+              status: 'accepted',
+              finalFare: Number(result?.finalFare ?? ride.proposedFare),
+            },
+            {
+              passengerId: ride.passengerId,
+              driverId: user.sub,
+            },
+          );
+          this.realtimeService.emitRideStatusChanged(
+            { rideId, status: 'accepted' },
+            { passengerId: ride.passengerId, driverId: user.sub },
+          );
+        } catch (err) {
+          // Log and continue
+        }
+
+        return result;
       }
 
       // Driver starts ride
@@ -432,13 +852,22 @@ export class RidesService {
             `Cannot start ride with current status "${ride.status}"`,
           );
         }
-        return this.prisma.ride.update({
+        const updated = await this.prisma.ride.update({
           where: { id: rideId },
           data: {
             status: 'ongoing',
             startedAt: new Date(),
           },
         });
+        try {
+          this.realtimeService.emitRideStatusChanged(
+            { rideId, status: 'ongoing' },
+            { passengerId: ride.passengerId, driverId: user.sub },
+          );
+        } catch (err) {
+          // Log and continue
+        }
+        return updated;
       }
 
       // Driver completes ride
@@ -476,6 +905,15 @@ export class RidesService {
           }
         }
 
+        try {
+          this.realtimeService.emitRideStatusChanged(
+            { rideId, status: 'completed' },
+            { passengerId: ride.passengerId, driverId: user.sub },
+          );
+        } catch (err) {
+          // Log and continue
+        }
+
         return updated;
       }
 
@@ -489,13 +927,22 @@ export class RidesService {
             `Driver cannot cancel ride with status "${ride.status}"`,
           );
         }
-        return this.prisma.ride.update({
+        const updated = await this.prisma.ride.update({
           where: { id: rideId },
           data: {
             status: 'cancelled',
             cancelledAt: new Date(),
           },
         });
+        try {
+          this.realtimeService.emitRideStatusChanged(
+            { rideId, status: 'cancelled' },
+            { passengerId: ride.passengerId, driverId: user.sub },
+          );
+        } catch (err) {
+          // Log and continue
+        }
+        return updated;
       }
     }
 
@@ -514,13 +961,22 @@ export class RidesService {
             `Passenger cannot cancel ride with status "${ride.status}"`,
           );
         }
-        return this.prisma.ride.update({
+        const updated = await this.prisma.ride.update({
           where: { id: rideId },
           data: {
             status: 'cancelled',
             cancelledAt: new Date(),
           },
         });
+        try {
+          this.realtimeService.emitRideStatusChanged(
+            { rideId, status: 'cancelled' },
+            { passengerId: ride.passengerId, driverId: ride.driverId ?? undefined },
+          );
+        } catch (err) {
+          // Log and continue
+        }
+        return updated;
       }
     }
 

@@ -18,7 +18,7 @@ export default function Index() {
   }
 
   if (!isAuthenticated) {
-    return <Redirect href="/(driver-auth)/welcome" />;
+    return <Redirect href="/(passenger-auth)/welcome" />;
   }
 
   if (role === "driver") {
@@ -28,5 +28,9 @@ export default function Index() {
     return <Redirect href="/(driver)/verification-status" />;
   }
 
-  return <Redirect href="/(driver-auth)/welcome" />;
+  if (role === "passenger") {
+    return <Redirect href="/(passenger)/home" />;
+  }
+
+  return <Redirect href="/(passenger-auth)/welcome" />;
 }

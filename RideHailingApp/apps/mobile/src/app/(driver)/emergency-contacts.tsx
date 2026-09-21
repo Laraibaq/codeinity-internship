@@ -5,6 +5,8 @@ import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { themeColors } from "@/constants/theme-colors";
+import { PhoneInput } from "@/components/phone-input";
+import { normalizePhone } from "@/utils/phone";
 
 // safety-center.tsx's "Emergency Contacts" row previously had no destination (a bare, unwired
 // Pressable). No backend exists yet to store real contacts, so the list below is local component
@@ -27,20 +29,23 @@ export default function EmergencyContactsScreen() {
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState("");
   const [relation, setRelation] = useState("");
+  const [countryCode, setCountryCode] = useState("1");
   const [phone, setPhone] = useState("");
 
   const resetForm = () => {
     setName("");
     setRelation("");
+    setCountryCode("1");
     setPhone("");
     setAdding(false);
   };
 
   const handleAdd = () => {
     if (!name.trim() || !phone.trim()) return;
+    const normalizedPhone = normalizePhone(phone, countryCode);
     setContacts((current) => [
       ...current,
-      { id: `${Date.now()}`, name: name.trim(), relation: relation.trim() || "Contact", phone: phone.trim() },
+      { id: `${Date.now()}`, name: name.trim(), relation: relation.trim() || "Contact", phone: normalizedPhone },
     ]);
     resetForm();
   };
@@ -126,13 +131,15 @@ export default function EmergencyContactsScreen() {
               placeholder="Relationship (e.g. Spouse)"
               placeholderTextColor={themeColors.outline}
             />
-            <TextInput
-              className="min-h-[48px] rounded-lg border border-outline-variant bg-surface-container-lowest px-4 font-body-md text-body-md text-on-surface"
-              value={phone}
-              onChangeText={setPhone}
+            <PhoneInput
+              countryCode={countryCode}
+              onCountryCodeChange={setCountryCode}
+              phoneNumber={phone}
+              onPhoneNumberChange={setPhone}
               placeholder="Phone number"
-              placeholderTextColor={themeColors.outline}
-              keyboardType="phone-pad"
+              variant="outline"
+              inputHeight={48}
+              showIcon={false}
             />
             <View className="flex-row justify-end gap-2">
               <Pressable onPress={resetForm} className="rounded-lg px-4 py-2">

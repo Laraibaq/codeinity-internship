@@ -45,6 +45,14 @@ export class RidesController {
     return this.ridesService.getAvailableRides(user.sub);
   }
 
+  @Get('driver/offers')
+  getDriverOffers(@CurrentUser() user: JwtPayload) {
+    if (user.role !== 'driver') {
+      throw new ForbiddenException('Only drivers can access driver offers');
+    }
+    return this.ridesService.getDriverOffers(user.sub);
+  }
+
   @Get('history')
   getDriverRideHistory(
     @CurrentUser() user: JwtPayload,
@@ -111,6 +119,57 @@ export class RidesController {
       throw new ForbiddenException('Only passengers can accept offers');
     }
     return this.ridesService.acceptOffer(id, offerId, user.sub);
+  }
+
+  @Post(':id/offers/:offerId/decline')
+  @HttpCode(HttpStatus.OK)
+  declineOffer(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Param('offerId', new ParseUUIDPipe()) offerId: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    if (user.role !== 'passenger') {
+      throw new ForbiddenException('Only passengers can decline offers');
+    }
+    return this.ridesService.declineOffer(id, offerId, user.sub);
+  }
+
+  @Post(':id/offers/:offerId/driver-accept')
+  @HttpCode(HttpStatus.OK)
+  driverAcceptOffer(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Param('offerId', new ParseUUIDPipe()) offerId: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    if (user.role !== 'driver') {
+      throw new ForbiddenException('Only drivers can accept driver offers');
+    }
+    return this.ridesService.driverAcceptOffer(user.sub, id, offerId);
+  }
+
+  @Post(':id/offers/:offerId/driver-reject')
+  @HttpCode(HttpStatus.OK)
+  driverRejectOffer(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Param('offerId', new ParseUUIDPipe()) offerId: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    if (user.role !== 'driver') {
+      throw new ForbiddenException('Only drivers can reject driver offers');
+    }
+    return this.ridesService.driverRejectOffer(user.sub, id, offerId);
+  }
+
+  @Post(':id/match')
+  @HttpCode(HttpStatus.OK)
+  matchRide(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    if (user.role !== 'passenger') {
+      throw new ForbiddenException('Only passengers can trigger ride matching');
+    }
+    return this.ridesService.matchRide(id);
   }
 
   @Patch(':id/status')

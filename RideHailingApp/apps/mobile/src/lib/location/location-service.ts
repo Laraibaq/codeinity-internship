@@ -1,9 +1,24 @@
 import * as Location from "expo-location";
+import {
+  isMapboxConfigured,
+  searchPlacesMapbox,
+  type MapboxSearchResult,
+} from "@/lib/api/passenger/mapbox";
 
 export interface Coordinates {
   latitude: number;
   longitude: number;
   accuracy: number | null;
+  timestamp?: number;
+}
+
+export interface GeocodedPlace {
+  id: string;
+  name: string;
+  address: string;
+  latitude: number;
+  longitude: number;
+  distanceKm?: number;
 }
 
 export async function requestForegroundLocationPermission(): Promise<Location.PermissionStatus> {
@@ -37,9 +52,10 @@ export async function getCurrentCoordinates(): Promise<Coordinates | null> {
       latitude: loc.coords.latitude,
       longitude: loc.coords.longitude,
       accuracy: loc.coords.accuracy ?? null,
+      timestamp: loc.timestamp,
     };
   } catch {
-    // Attempt fallback to last known position if fresh fix fails
+    // Fallback to last known position if fresh fix fails
     try {
       const last = await Location.getLastKnownPositionAsync();
       if (last) {
@@ -47,12 +63,97 @@ export async function getCurrentCoordinates(): Promise<Coordinates | null> {
           latitude: last.coords.latitude,
           longitude: last.coords.longitude,
           accuracy: last.coords.accuracy ?? null,
+          timestamp: last.timestamp,
         };
       }
     } catch {
       // ignore
     }
     return null;
+  }
+}
+
+/**
+ * Converts latitude and longitude into human-readable street and city address
+ */
+export async function reverseGeocodeLocation(
+  latitude: number,
+  longitude: number,
+): Promise<{ name: string; address: string }> {
+  try {
+    const results = await Location.reverseGeocodeAsync({ latitude, longitude });
+    if (!results || results.length === 0) {
+      return {
+        name: `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`,
+        address: "Pinned Location",
+      };
+    }
+
+    const first = results[0];
+    const streetLine = [first.streetNumber, first.street || first.name]
+      .filter(Boolean)
+      .join(" ");
+    const cityLine = [first.city || first.subregion, first.region]
+      .filter(Boolean)
+      .join(", ");
+
+    const name = streetLine || first.name || "Pinned Location";
+    const address = [streetLine, cityLine].filter(Boolean).join(", ") || `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
+
+    return { name, address };
+  } catch {
+    return {
+      name: "Pinned Location",
+      address: `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`,
+    };
+  }
+}
+
+/**
+ * Searches for places via Mapbox Places API if configured, or falls back to native device geocoding
+ */
+export async function searchPlaces(
+  query: string,
+  proximity?: { latitude: number; longitude: number },
+): Promise<GeocodedPlace[]> {
+  const trimmed = query.trim();
+  if (!trimmed) return [];
+
+  // Try Mapbox Places API first if configured
+  if (isMapboxConfigured()) {
+    try {
+      const mapboxResults = await searchPlacesMapbox(trimmed, proximity);
+      if (mapboxResults.length > 0) {
+        return mapboxResults;
+      }
+    } catch (err: any) {
+      console.warn("Mapbox geocoding error, falling back to native geocoder:", err.message);
+    }
+  }
+
+  // Native expo-location geocoding fallback
+  try {
+    const geoResults = await Location.geocodeAsync(trimmed);
+    if (!geoResults || geoResults.length === 0) {
+      return [];
+    }
+
+    const places: GeocodedPlace[] = [];
+    for (let i = 0; i < Math.min(geoResults.length, 5); i++) {
+      const item = geoResults[i];
+      const rev = await reverseGeocodeLocation(item.latitude, item.longitude);
+      places.push({
+        id: `geo-${i}-${item.latitude}-${item.longitude}`,
+        name: rev.name || trimmed,
+        address: rev.address,
+        latitude: item.latitude,
+        longitude: item.longitude,
+      });
+    }
+
+    return places;
+  } catch {
+    return [];
   }
 }
 
@@ -69,14 +170,15 @@ export async function startLocationSubscription(
     const sub = await Location.watchPositionAsync(
       {
         accuracy: Location.Accuracy.Balanced,
-        timeInterval: 10000, // 10s battery-conscious sampling
-        distanceInterval: 15, // 15m minimum displacement
+        timeInterval: 10000,
+        distanceInterval: 15,
       },
       (loc) => {
         onLocation({
           latitude: loc.coords.latitude,
           longitude: loc.coords.longitude,
           accuracy: loc.coords.accuracy ?? null,
+          timestamp: loc.timestamp,
         });
       },
     );
