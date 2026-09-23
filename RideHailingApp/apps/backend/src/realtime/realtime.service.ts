@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { RealtimeGateway } from './realtime.gateway';
 import type {
+  DriverLocationUpdatedEvent,
   OfferCreatedEvent,
   OfferUpdatedEvent,
   RideAcceptedEvent,
@@ -12,6 +13,26 @@ export class RealtimeService {
   private readonly logger = new Logger(RealtimeService.name);
 
   constructor(private readonly gateway: RealtimeGateway) {}
+
+  emitDriverLocationUpdated(
+    event: DriverLocationUpdatedEvent,
+    targets: { passengerId: string; driverId: string },
+  ) {
+    if (!this.gateway.server) {
+      this.logger.warn('WebSocket server not initialized; skipping emitDriverLocationUpdated');
+      return;
+    }
+
+    this.logger.log(
+      `Emitting driver:location-updated for ride ${event.rideId}, driver ${event.driverId}: (${event.lat}, ${event.lng})`,
+    );
+
+    // Emit to authorized ride room
+    this.gateway.server.to(`ride:${event.rideId}`).emit('driver:location-updated', event);
+
+    // Also emit to passenger private room to ensure delivery during room reconnects
+    this.gateway.server.to(`user:${targets.passengerId}`).emit('driver:location-updated', event);
+  }
 
   emitOfferCreated(
     event: OfferCreatedEvent,

@@ -33,3 +33,13 @@ export interface RideStatusChangedEvent {
   rideId: string;
   status: string;
 }
+
+export interface DriverLocationUpdatedEvent {
+  rideId: string;
+  driverId: string;
+  lat: number;
+  lng: number;
+  timestamp: string;
+  accuracy?: number;
+}
+
