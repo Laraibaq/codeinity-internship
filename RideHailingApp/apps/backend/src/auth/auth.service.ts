@@ -1,5 +1,6 @@
 import {
   ConflictException,
+  ForbiddenException,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -146,6 +147,28 @@ export class AuthService {
     }
 
     throw new UnauthorizedException('Invalid credentials');
+  }
+
+  async loginAdmin(dto: LoginDto) {
+    const admin = await this.prisma.admin.findUnique({
+      where: { email: dto.identifier },
+    });
+    if (!admin || !(await argon2.verify(admin.passwordHash, dto.password))) {
+      throw new UnauthorizedException('Invalid admin credentials');
+    }
+    if (!admin.isActive) {
+      throw new ForbiddenException('Admin account is disabled');
+    }
+    return {
+      ...this.issueTokens({ sub: admin.id, role: 'admin' }),
+      role: 'admin' as const,
+      admin: {
+        id: admin.id,
+        email: admin.email,
+        name: admin.name,
+        role: admin.role,
+      },
+    };
   }
 
   async requestPasswordReset(dto: PasswordResetRequestDto) {

@@ -54,14 +54,23 @@ export class RidesController {
   }
 
   @Get('history')
-  getDriverRideHistory(
+  getRideHistory(
     @CurrentUser() user: JwtPayload,
     @Query('status') status?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
   ) {
-    if (user.role !== 'driver') {
-      throw new ForbiddenException('Only drivers can access ride history');
+    if (user.role === 'driver') {
+      return this.ridesService.getDriverRideHistory(user.sub, status);
     }
-    return this.ridesService.getDriverRideHistory(user.sub, status);
+    if (user.role === 'passenger') {
+      return this.ridesService.getPassengerRideHistory(user.sub, {
+        status,
+        page: page ? parseInt(page, 10) : 1,
+        limit: limit ? parseInt(limit, 10) : 20,
+      });
+    }
+    throw new ForbiddenException('Invalid role for ride history');
   }
 
   @Get('earnings')
@@ -180,5 +189,15 @@ export class RidesController {
     @Body() dto: UpdateRideStatusDto,
   ) {
     return this.ridesService.updateRideStatus(id, user, dto);
+  }
+
+  @Post(':id/cancel')
+  @HttpCode(HttpStatus.OK)
+  cancelRide(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @CurrentUser() user: JwtPayload,
+    @Body() body?: { reason?: string },
+  ) {
+    return this.ridesService.cancelRide(id, user, body?.reason);
   }
 }

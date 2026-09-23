@@ -16,6 +16,10 @@ describe('RatingsService & RatingsController', () => {
 
   beforeEach(async () => {
     prisma = {
+      user: {
+        findUnique: jest.fn(),
+        update: jest.fn(),
+      },
       driver: {
         findUnique: jest.fn(),
         update: jest.fn(),
@@ -85,7 +89,7 @@ describe('RatingsService & RatingsController', () => {
       expect(result.reviews[0].name).toBe('Alice');
     });
 
-    it('rejects non-driver role in controller', () => {
+    it('rejects non-driver role in controller for driver ratings', () => {
       expect(() =>
         ratingsController.getDriverRatings({
           sub: mockPassengerId,
@@ -96,7 +100,7 @@ describe('RatingsService & RatingsController', () => {
   });
 
   describe('2. Driver rating submission for passenger', () => {
-    it('creates driver-to-passenger rating on completed assigned ride', async () => {
+    it('creates driver-to-passenger rating on completed assigned ride and updates passenger aggregate', async () => {
       prisma.ride.findUnique.mockResolvedValue({
         id: mockRideId,
         driverId: mockDriverId,
@@ -109,6 +113,8 @@ describe('RatingsService & RatingsController', () => {
         score: 5,
         comment: 'Polite rider',
       });
+      prisma.rating.findMany.mockResolvedValue([{ score: 5 }]);
+      prisma.user.update.mockResolvedValue({ id: mockPassengerId, rating: 5.0 });
 
       const result = await ratingsService.createRideRating(
         mockRideId,
@@ -125,6 +131,12 @@ describe('RatingsService & RatingsController', () => {
             fromRole: 'driver',
             score: 5,
           }),
+        }),
+      );
+      expect(prisma.user.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: mockPassengerId },
+          data: { rating: 5.0 },
         }),
       );
       expect(result).toHaveProperty('id', 'new-rating-id');
@@ -180,6 +192,42 @@ describe('RatingsService & RatingsController', () => {
         ),
       ).rejects.toThrow(ConflictException);
     });
+
+    it('rejects self-rating if driver attempts to rate themselves', async () => {
+      prisma.ride.findUnique.mockResolvedValue({
+        id: mockRideId,
+        driverId: mockDriverId,
+        passengerId: mockDriverId,
+        status: 'completed',
+        ratings: [],
+      });
+
+      await expect(
+        ratingsService.createRideRating(
+          mockRideId,
+          { sub: mockDriverId, role: 'driver' },
+          { score: 5 },
+        ),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('rejects self-rating if passenger attempts to rate themselves', async () => {
+      prisma.ride.findUnique.mockResolvedValue({
+        id: mockRideId,
+        driverId: mockPassengerId,
+        passengerId: mockPassengerId,
+        status: 'completed',
+        ratings: [],
+      });
+
+      await expect(
+        ratingsService.createRideRating(
+          mockRideId,
+          { sub: mockPassengerId, role: 'passenger' },
+          { score: 5 },
+        ),
+      ).rejects.toThrow(BadRequestException);
+    });
   });
 
   describe('3. Passenger rating updates driver aggregate rating', () => {
@@ -207,6 +255,47 @@ describe('RatingsService & RatingsController', () => {
           data: { rating: 4.5 },
         }),
       );
+    });
+  });
+
+  describe('4. Passenger rating retrieval', () => {
+    it('returns passenger average, total count, star breakdown, and review cards', async () => {
+      prisma.user.findUnique.mockResolvedValue({ id: mockPassengerId, rating: 4.9 });
+      prisma.rating.findMany.mockResolvedValue([
+        {
+          id: 'r10',
+          rideId: mockRideId,
+          score: 5,
+          comment: 'Very pleasant passenger!',
+          createdAt: new Date(),
+          ride: { driver: { name: 'Driver Dan' } },
+        },
+      ]);
+
+      const result = await ratingsService.getPassengerRatings(mockPassengerId);
+
+      expect(prisma.rating.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            toUserId: mockPassengerId,
+            fromRole: 'driver',
+          },
+        }),
+      );
+      expect(result.totalRatings).toBe(1);
+      expect(result.averageRating).toBe(5.0);
+      expect(result.starBreakdown[0]).toEqual({ stars: 5, count: 1 });
+      expect(result.reviews).toHaveLength(1);
+      expect(result.reviews[0].name).toBe('Driver Dan');
+    });
+
+    it('rejects non-passenger role in controller for passenger ratings', () => {
+      expect(() =>
+        ratingsController.getPassengerRatings({
+          sub: mockDriverId,
+          role: 'driver',
+        } as any),
+      ).toThrow(ForbiddenException);
     });
   });
 });

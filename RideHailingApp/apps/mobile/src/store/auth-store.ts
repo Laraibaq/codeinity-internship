@@ -8,6 +8,10 @@ import {
   storeAuthUser,
   type StoredAuthUser,
 } from "@/lib/api-client";
+import {
+  getGlobalActiveDeviceToken,
+  removeDeviceToken,
+} from "@/lib/api/notifications";
 
 export type AuthRole = "driver" | "passenger";
 export type DriverVerificationStatus = "pending" | "approved" | "rejected";
@@ -95,6 +99,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   logout: async () => {
+    try {
+      const activeToken = getGlobalActiveDeviceToken();
+      if (activeToken) {
+        await removeDeviceToken(activeToken).catch(() => {});
+      }
+    } catch {
+      // Ignore network errors on logout cleanup
+    }
     await clearAuthTokens();
     set({
       accessToken: null,

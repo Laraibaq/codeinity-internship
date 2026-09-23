@@ -80,6 +80,8 @@ export default function PassengerRideSelectScreen() {
     estimatedDistanceKm,
     selectedRideType,
     setSelectedRideType,
+    paymentMethod,
+    setPaymentMethod,
   } = usePassengerRideStore();
 
   const [selectedId, setSelectedId] = useState(selectedRideType || "standard");
@@ -228,12 +230,35 @@ export default function PassengerRideSelectScreen() {
         {/* Payment + CTA */}
         <View style={styles.actionArea}>
           {/* Payment selector */}
-          <Pressable style={styles.paymentRow}>
+          <Pressable
+            style={styles.paymentRow}
+            onPress={() => {
+              const nextMethod =
+                paymentMethod === "cash" ? "wallet" : paymentMethod === "wallet" ? "card" : "cash";
+              setPaymentMethod(nextMethod);
+            }}
+          >
             <View style={styles.paymentCardIcon}>
-              <View style={styles.paymentCardGradient} />
+              <MaterialIcons
+                name={
+                  paymentMethod === "cash"
+                    ? "attach-money"
+                    : paymentMethod === "wallet"
+                    ? "account-balance-wallet"
+                    : "credit-card"
+                }
+                size={18}
+                color={themeColors.primary}
+              />
             </View>
             <View style={styles.paymentTextBlock}>
-              <Text style={styles.paymentName}>Personal •••• 4242</Text>
+              <Text style={styles.paymentName}>
+                {paymentMethod === "cash"
+                  ? "Cash Payment"
+                  : paymentMethod === "wallet"
+                  ? "In-App Wallet"
+                  : "Credit / Debit Card"}
+              </Text>
               <Text style={styles.paymentSwitch}>Switch</Text>
             </View>
             <MaterialIcons name="chevron-right" size={24} color={themeColors.onSurfaceVariant} />

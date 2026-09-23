@@ -1,4 +1,4 @@
-export type AuthRole = 'driver' | 'passenger';
+export type AuthRole = 'driver' | 'passenger' | 'admin';
 
 export interface JwtPayload {
   sub: string;

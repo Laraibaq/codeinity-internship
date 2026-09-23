@@ -160,6 +160,11 @@ export async function searchPlaces(
 export async function startLocationSubscription(
   onLocation: (coords: Coordinates) => void,
   onError?: (err: unknown) => void,
+  options?: {
+    accuracy?: Location.Accuracy;
+    timeInterval?: number;
+    distanceInterval?: number;
+  },
 ): Promise<(() => void) | null> {
   try {
     const perm = await checkForegroundLocationPermission();
@@ -169,9 +174,9 @@ export async function startLocationSubscription(
 
     const sub = await Location.watchPositionAsync(
       {
-        accuracy: Location.Accuracy.Balanced,
-        timeInterval: 10000,
-        distanceInterval: 15,
+        accuracy: options?.accuracy ?? Location.Accuracy.Balanced,
+        timeInterval: options?.timeInterval ?? 10000,
+        distanceInterval: options?.distanceInterval ?? 15,
       },
       (loc) => {
         onLocation({

@@ -6,6 +6,9 @@ import type {
   OfferUpdatedEvent,
   RideAcceptedEvent,
   RideStatusChangedEvent,
+  NegotiationOfferCreatedEvent,
+  NegotiationAcceptedEvent,
+  NegotiationRejectedEvent,
 } from './realtime-events.interface';
 
 @Injectable()
@@ -123,5 +126,77 @@ export class RealtimeService {
       this.gateway.server.to(`user:${targets.driverId}`).emit('ride:status-changed', event);
       this.gateway.server.to(`driver:${targets.driverId}`).emit('ride:status-changed', event);
     }
+  }
+
+  emitPaymentStatusChanged(
+    event: import('./realtime-events.interface').PaymentStatusChangedEvent,
+    targets: { passengerId: string; driverId: string },
+  ) {
+    if (!this.gateway.server) {
+      this.logger.warn('WebSocket server not initialized; skipping emitPaymentStatusChanged');
+      return;
+    }
+
+    this.logger.log(
+      `Emitting payment:status-changed for ride ${event.rideId} -> ${event.status}`,
+    );
+
+    this.gateway.server.to(`ride:${event.rideId}`).emit('payment:status-changed', event);
+    this.gateway.server.to(`user:${targets.passengerId}`).emit('payment:status-changed', event);
+    this.gateway.server.to(`user:${targets.driverId}`).emit('payment:status-changed', event);
+  }
+
+  emitNegotiationOfferCreated(
+    event: NegotiationOfferCreatedEvent,
+    targets: { passengerId: string; driverId: string },
+  ) {
+    if (!this.gateway.server) {
+      this.logger.warn('WebSocket server not initialized; skipping emitNegotiationOfferCreated');
+      return;
+    }
+
+    this.logger.log(
+      `Emitting negotiation:offer-created for ride ${event.rideId} (proposer=${event.proposerRole}, amount=${event.amount})`,
+    );
+
+    this.gateway.server.to(`ride:${event.rideId}`).emit('negotiation:offer-created', event);
+    this.gateway.server.to(`user:${targets.passengerId}`).emit('negotiation:offer-created', event);
+    this.gateway.server.to(`user:${targets.driverId}`).emit('negotiation:offer-created', event);
+  }
+
+  emitNegotiationAccepted(
+    event: NegotiationAcceptedEvent,
+    targets: { passengerId: string; driverId: string },
+  ) {
+    if (!this.gateway.server) {
+      this.logger.warn('WebSocket server not initialized; skipping emitNegotiationAccepted');
+      return;
+    }
+
+    this.logger.log(
+      `Emitting negotiation:accepted for ride ${event.rideId} -> finalFare=${event.finalFare}`,
+    );
+
+    this.gateway.server.to(`ride:${event.rideId}`).emit('negotiation:accepted', event);
+    this.gateway.server.to(`user:${targets.passengerId}`).emit('negotiation:accepted', event);
+    this.gateway.server.to(`user:${targets.driverId}`).emit('negotiation:accepted', event);
+  }
+
+  emitNegotiationRejected(
+    event: NegotiationRejectedEvent,
+    targets: { passengerId: string; driverId: string },
+  ) {
+    if (!this.gateway.server) {
+      this.logger.warn('WebSocket server not initialized; skipping emitNegotiationRejected');
+      return;
+    }
+
+    this.logger.log(
+      `Emitting negotiation:rejected for ride ${event.rideId}`,
+    );
+
+    this.gateway.server.to(`ride:${event.rideId}`).emit('negotiation:rejected', event);
+    this.gateway.server.to(`user:${targets.passengerId}`).emit('negotiation:rejected', event);
+    this.gateway.server.to(`user:${targets.driverId}`).emit('negotiation:rejected', event);
   }
 }

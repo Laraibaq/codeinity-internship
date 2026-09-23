@@ -1,5 +1,5 @@
-import { useEffect } from "react";
-import { Image, Pressable, ScrollView, Text, View } from "react-native";
+import { useEffect, useState } from "react";
+import { ActivityIndicator, Image, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useQueryClient } from "@tanstack/react-query";
@@ -50,6 +50,12 @@ export default function RideCompletedScreen() {
   const queryClient = useQueryClient();
   const params = useLocalSearchParams<{ rideId?: string; fare?: string }>();
 
+  const [rating, setRating] = useState(5);
+  const [comment, setComment] = useState("");
+  const [isSubmittingRating, setIsSubmittingRating] = useState(false);
+  const [ratingSubmitted, setRatingSubmitted] = useState(false);
+  const [ratingError, setRatingError] = useState<string | null>(null);
+
   useEffect(() => {
     if (params.rideId && !params.rideId.startsWith("req-")) {
       apiClient
@@ -64,6 +70,29 @@ export default function RideCompletedScreen() {
 
   const parsedFare = Number(params.fare);
   const earnings = Number.isFinite(parsedFare) && parsedFare > 0 ? parsedFare : 18.5;
+
+  const handleSubmitRating = async () => {
+    if (!params.rideId || params.rideId.startsWith("req-") || ratingSubmitted) {
+      return;
+    }
+    setIsSubmittingRating(true);
+    setRatingError(null);
+    try {
+      await apiClient.post(`/rides/${params.rideId}/rate`, {
+        score: rating,
+        comment: comment.trim() || undefined,
+      });
+      setRatingSubmitted(true);
+    } catch (err: any) {
+      if (err?.response?.status === 409) {
+        setRatingSubmitted(true);
+      } else {
+        setRatingError(err?.response?.data?.message || "Failed to submit rating.");
+      }
+    } finally {
+      setIsSubmittingRating(false);
+    }
+  };
 
   const backToDashboard = () =>
     router.dismissTo({
@@ -86,7 +115,7 @@ export default function RideCompletedScreen() {
 
       <ScrollView
         className="absolute inset-0 z-10"
-        contentContainerClassName="flex-grow items-center justify-center p-container-margin"
+        contentContainerClassName="flex-grow items-center justify-center p-container-margin py-8"
       >
         <View className="w-full max-w-[400px] items-center rounded-3xl border border-surface-variant bg-surface-container-lowest p-stack-md shadow-lg">
           <View className="mb-stack-sm h-20 w-20 items-center justify-center rounded-full bg-primary-container">
@@ -120,6 +149,75 @@ export default function RideCompletedScreen() {
               <Text className="font-fare-display text-fare-display text-on-surface">15</Text>
               <Text className="font-label-sm text-label-sm text-on-surface-variant">min</Text>
             </View>
+          </View>
+
+          {/* Rate Passenger Card */}
+          <View className="mb-stack-lg w-full rounded-2xl border border-outline-variant/30 bg-surface p-4 items-center shadow-xs">
+            <Text className="font-headline-sm text-on-surface text-base font-bold mb-1">
+              Rate your passenger
+            </Text>
+            <Text className="text-on-surface-variant text-xs mb-3">
+              How was your experience with the passenger?
+            </Text>
+
+            {ratingSubmitted ? (
+              <View className="flex-row items-center bg-emerald-500/10 px-3 py-2 rounded-xl">
+                <MaterialIcons name="check" size={18} color="#10b981" />
+                <Text className="text-emerald-600 text-xs font-semibold ml-1.5">
+                  Rating submitted! Thank you.
+                </Text>
+              </View>
+            ) : (
+              <>
+                <View className="flex-row items-center space-x-2 mb-3">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <Pressable
+                      key={star}
+                      onPress={() => setRating(star)}
+                      className="p-1 active:scale-125"
+                      accessibilityLabel={`${star} stars`}
+                    >
+                      <MaterialIcons
+                        name={star <= rating ? "star" : "star-outline"}
+                        size={32}
+                        color={star <= rating ? "#f59e0b" : "#9ca3af"}
+                      />
+                    </Pressable>
+                  ))}
+                </View>
+
+                <View className="w-full bg-surface-container rounded-xl p-2.5 border border-outline-variant/20 mb-3">
+                  <TextInput
+                    placeholder="Optional feedback about the passenger..."
+                    placeholderTextColor="#9ca3af"
+                    value={comment}
+                    onChangeText={setComment}
+                    maxLength={500}
+                    multiline
+                    numberOfLines={2}
+                    className="text-on-surface text-xs min-h-[44px]"
+                    textAlignVertical="top"
+                  />
+                </View>
+
+                {ratingError ? (
+                  <Text className="text-red-500 text-xs mb-2">{ratingError}</Text>
+                ) : null}
+
+                <Pressable
+                  onPress={handleSubmitRating}
+                  disabled={isSubmittingRating}
+                  className="w-full py-2.5 rounded-xl bg-primary-container items-center justify-center active:scale-98 flex-row"
+                >
+                  {isSubmittingRating ? (
+                    <ActivityIndicator size="small" color={themeColors.onPrimaryContainer} className="mr-1.5" />
+                  ) : null}
+                  <Text className="text-xs font-bold text-on-primary-container">
+                    {isSubmittingRating ? "Submitting..." : "Submit Rating"}
+                  </Text>
+                </Pressable>
+              </>
+            )}
           </View>
 
           <View className="w-full gap-stack-sm">

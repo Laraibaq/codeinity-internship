@@ -1,6 +1,7 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { SupabaseStorageService } from '../supabase/supabase-storage.service';
+import { RealtimeService } from '../realtime/realtime.service';
 import { DocumentType } from './dto/upload-document.dto';
 import { UpdateLocationDto } from './dto/update-location.dto';
 import { UpdateDriverStatusDto } from './dto/update-driver-status.dto';
@@ -9,9 +10,12 @@ import { UpdateVehicleDto } from './dto/update-vehicle.dto';
 
 @Injectable()
 export class DriversService {
+  private readonly logger = new Logger(DriversService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly storage: SupabaseStorageService,
+    private readonly realtimeService: RealtimeService,
   ) {}
 
   async uploadDocument(
@@ -109,7 +113,7 @@ export class DriversService {
       throw new NotFoundException('Driver profile not found');
     }
 
-    return this.prisma.driver.update({
+    const updated = await this.prisma.driver.update({
       where: { id: driverId },
       data: {
         currentLat: dto.latitude,
@@ -122,6 +126,42 @@ export class DriversService {
         isOnline: true,
       },
     });
+
+    // Check if driver has an active ride assignment (accepted or ongoing)
+    try {
+      const activeRide = await this.prisma.ride.findFirst({
+        where: {
+          driverId,
+          status: { in: ['accepted', 'ongoing'] },
+        },
+        select: {
+          id: true,
+          passengerId: true,
+          status: true,
+        },
+      });
+
+      if (activeRide) {
+        this.realtimeService.emitDriverLocationUpdated(
+          {
+            rideId: activeRide.id,
+            driverId,
+            lat: dto.latitude,
+            lng: dto.longitude,
+            timestamp: dto.timestamp || new Date().toISOString(),
+            accuracy: dto.accuracy,
+          },
+          {
+            passengerId: activeRide.passengerId,
+            driverId,
+          },
+        );
+      }
+    } catch (err) {
+      this.logger.warn(`Could not emit driver location for driver ${driverId}:`, err);
+    }
+
+    return updated;
   }
 
   async updateStatus(

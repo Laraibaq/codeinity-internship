@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -59,11 +59,23 @@ export default function NavigateToPickupScreen() {
     dropoffLng?: string;
   }>();
 
-  const { latitude: driverLat, longitude: driverLng } = useLocationStore();
+  const {
+    latitude: driverLat,
+    longitude: driverLng,
+    startActiveRideTracking,
+    stopActiveRideTracking,
+  } = useLocationStore();
+
   const driverLocation =
     driverLat != null && driverLng != null
       ? { latitude: driverLat, longitude: driverLng }
       : undefined;
+
+  useEffect(() => {
+    if (params.rideId && !params.rideId.startsWith("req-")) {
+      startActiveRideTracking(params.rideId);
+    }
+  }, [params.rideId, startActiveRideTracking]);
 
   const name = params.name || DEFAULT_NAME;
   const parsedRating = Number(params.rating);
@@ -87,6 +99,7 @@ export default function NavigateToPickupScreen() {
   const handleCancelRide = async () => {
     if (isCancelling) return;
     setIsCancelling(true);
+    stopActiveRideTracking();
     if (params.rideId && !params.rideId.startsWith("req-")) {
       try {
         await apiClient.patch(`/rides/${params.rideId}/status`, { status: "cancelled" });

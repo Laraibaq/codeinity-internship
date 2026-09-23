@@ -3,6 +3,7 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
@@ -13,13 +14,17 @@ import { UpdateRideStatusDto, UpdateRideStatusEnum } from './dto/update-ride-sta
 
 import { MatchingService, calculateHaversineDistanceKm } from './matching.service';
 import { RealtimeService } from '../realtime/realtime.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class RidesService {
+  private readonly logger = new Logger(RidesService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly matchingService: MatchingService,
     private readonly realtimeService: RealtimeService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async createRide(passengerId: string, dto: CreateRideDto) {
@@ -95,6 +100,9 @@ export class RidesService {
             phone: true,
             rating: true,
             profilePhotoUrl: true,
+            currentLat: true,
+            currentLng: true,
+            updatedAt: true,
             vehicle: true,
           },
         },
@@ -477,7 +485,7 @@ export class RidesService {
         ride: updatedRide,
         offer: acceptedOffer,
       };
-    });
+    }, { timeout: 45000, maxWait: 25000 });
 
     try {
       this.realtimeService.emitRideAccepted(
@@ -506,6 +514,29 @@ export class RidesService {
       );
     } catch (err) {
       // Log and continue
+    }
+
+    // Phase 10: Asynchronous push notifications
+    try {
+      this.notificationsService
+        .sendToUser(
+          passengerId,
+          'Ride Accepted',
+          'Your ride request has been accepted!',
+          { type: 'ride_accepted', rideId, driverId: result.offer.driverId },
+        )
+        .catch((pushErr) => this.logger.warn(`Push failed for passenger: ${pushErr?.message}`));
+
+      this.notificationsService
+        .sendToUser(
+          result.offer.driverId,
+          'Offer Accepted',
+          'The passenger accepted your offer!',
+          { type: 'ride_accepted', rideId },
+        )
+        .catch((pushErr) => this.logger.warn(`Push failed for driver: ${pushErr?.message}`));
+    } catch (err) {
+      this.logger.warn(`Failed to dispatch push on acceptOffer: ${err?.message}`);
     }
 
     return result;
@@ -637,7 +668,7 @@ export class RidesService {
         ride: updatedRide,
         offer: acceptedOffer,
       };
-    });
+    }, { timeout: 45000, maxWait: 25000 });
 
     try {
       this.realtimeService.emitRideAccepted(
@@ -666,6 +697,23 @@ export class RidesService {
       );
     } catch (err) {
       // Log and continue
+    }
+
+    // Phase 10: Asynchronous push notification to passenger
+    try {
+      const passengerId = result.ride.passengerId || (result.ride as any).passenger?.id;
+      if (passengerId) {
+        this.notificationsService
+          .sendToUser(
+            passengerId,
+            'Ride Accepted',
+            'A driver has accepted your ride request!',
+            { type: 'ride_accepted', rideId, driverId },
+          )
+          .catch((pushErr) => this.logger.warn(`Push failed: ${pushErr?.message}`));
+      }
+    } catch (err) {
+      this.logger.warn(`Failed to dispatch push on driverAcceptOffer: ${err?.message}`);
     }
 
     return result;
@@ -816,7 +864,7 @@ export class RidesService {
               driver: { select: { id: true, name: true, phone: true, vehicle: true } },
             },
           });
-        });
+        }, { timeout: 45000, maxWait: 25000 });
 
         try {
           this.realtimeService.emitRideAccepted(
@@ -839,6 +887,20 @@ export class RidesService {
           // Log and continue
         }
 
+        // Phase 10: Asynchronous push notification to passenger
+        try {
+          this.notificationsService
+            .sendToUser(
+              ride.passengerId,
+              'Ride Accepted',
+              'A driver has accepted your ride request!',
+              { type: 'ride_accepted', rideId, driverId: user.sub },
+            )
+            .catch((pushErr) => this.logger.warn(`Push failed: ${pushErr?.message}`));
+        } catch (err) {
+          this.logger.warn(`Failed to dispatch push on driver direct accept: ${err?.message}`);
+        }
+
         return result;
       }
 
@@ -848,25 +910,58 @@ export class RidesService {
           throw new ForbiddenException('Only the assigned driver can start this ride');
         }
         if (ride.status !== 'accepted') {
+          if (ride.status === 'ongoing') {
+            throw new ConflictException('Ride is already ongoing');
+          }
           throw new BadRequestException(
             `Cannot start ride with current status "${ride.status}"`,
           );
         }
-        const updated = await this.prisma.ride.update({
-          where: { id: rideId },
+
+        const now = new Date();
+        const updateResult = await this.prisma.ride.updateMany({
+          where: {
+            id: rideId,
+            driverId: user.sub,
+            status: 'accepted',
+          },
           data: {
             status: 'ongoing',
-            startedAt: new Date(),
+            startedAt: now,
           },
         });
+
+        if (updateResult.count === 0) {
+          const fresh = await this.prisma.ride.findUnique({ where: { id: rideId } });
+          if (!fresh) throw new NotFoundException('Ride not found');
+          if (fresh.status === 'ongoing') throw new ConflictException('Ride is already ongoing');
+          throw new BadRequestException(`Cannot start ride with current status "${fresh.status}"`);
+        }
+
+        const updated = (await this.prisma.ride.findUnique({ where: { id: rideId } }))!;
         try {
           this.realtimeService.emitRideStatusChanged(
-            { rideId, status: 'ongoing' },
+            { rideId, status: 'ongoing', timestamp: now.toISOString() },
             { passengerId: ride.passengerId, driverId: user.sub },
           );
         } catch (err) {
           // Log and continue
         }
+
+        // Phase 10: Asynchronous push notification to passenger
+        try {
+          this.notificationsService
+            .sendToUser(
+              ride.passengerId,
+              'Ride Started',
+              'Your trip is now in progress. Have a safe journey!',
+              { type: 'ride_started', rideId },
+            )
+            .catch((pushErr) => this.logger.warn(`Push failed: ${pushErr?.message}`));
+        } catch (err) {
+          this.logger.warn(`Failed to dispatch push on ride start: ${err?.message}`);
+        }
+
         return updated;
       }
 
@@ -876,18 +971,35 @@ export class RidesService {
           throw new ForbiddenException('Only the assigned driver can complete this ride');
         }
         if (ride.status !== 'ongoing') {
+          if (ride.status === 'completed') {
+            throw new ConflictException('Ride is already completed');
+          }
           throw new BadRequestException(
             `Cannot complete ride with current status "${ride.status}"`,
           );
         }
-        const updated = await this.prisma.ride.update({
-          where: { id: rideId },
+
+        const now = new Date();
+        const updateResult = await this.prisma.ride.updateMany({
+          where: {
+            id: rideId,
+            driverId: user.sub,
+            status: 'ongoing',
+          },
           data: {
             status: 'completed',
-            completedAt: new Date(),
+            completedAt: now,
           },
         });
 
+        if (updateResult.count === 0) {
+          const fresh = await this.prisma.ride.findUnique({ where: { id: rideId } });
+          if (!fresh) throw new NotFoundException('Ride not found');
+          if (fresh.status === 'completed') throw new ConflictException('Ride is already completed');
+          throw new BadRequestException(`Cannot complete ride with current status "${fresh.status}"`);
+        }
+
+        const updated = (await this.prisma.ride.findUnique({ where: { id: rideId } }))!;
         const fare = Number(updated.finalFare ?? updated.proposedFare ?? 0);
         if (this.prisma.notification?.create) {
           try {
@@ -907,11 +1019,25 @@ export class RidesService {
 
         try {
           this.realtimeService.emitRideStatusChanged(
-            { rideId, status: 'completed' },
+            { rideId, status: 'completed', timestamp: now.toISOString() },
             { passengerId: ride.passengerId, driverId: user.sub },
           );
         } catch (err) {
           // Log and continue
+        }
+
+        // Phase 10: Asynchronous push notification to passenger
+        try {
+          this.notificationsService
+            .sendToUser(
+              ride.passengerId,
+              'Ride Completed',
+              `Your ride has arrived! Total: $${fare.toFixed(2)}. Don't forget to rate your trip.`,
+              { type: 'ride_completed', rideId, fare },
+            )
+            .catch((pushErr) => this.logger.warn(`Push failed: ${pushErr?.message}`));
+        } catch (err) {
+          this.logger.warn(`Failed to dispatch push on ride complete: ${err?.message}`);
         }
 
         return updated;
@@ -923,25 +1049,63 @@ export class RidesService {
           throw new ForbiddenException('Only the assigned driver can cancel this ride');
         }
         if (ride.status !== 'accepted') {
+          if (ride.status === 'cancelled') {
+            throw new ConflictException('Ride is already cancelled');
+          }
           throw new BadRequestException(
             `Driver cannot cancel ride with status "${ride.status}"`,
           );
         }
-        const updated = await this.prisma.ride.update({
-          where: { id: rideId },
+
+        const now = new Date();
+        const updateResult = await this.prisma.ride.updateMany({
+          where: {
+            id: rideId,
+            driverId: user.sub,
+            status: 'accepted',
+          },
           data: {
             status: 'cancelled',
-            cancelledAt: new Date(),
+            cancelledAt: now,
           },
         });
+
+        if (updateResult.count === 0) {
+          const fresh = await this.prisma.ride.findUnique({ where: { id: rideId } });
+          if (!fresh) throw new NotFoundException('Ride not found');
+          if (fresh.status === 'cancelled') throw new ConflictException('Ride is already cancelled');
+          throw new BadRequestException(`Driver cannot cancel ride with status "${fresh.status}"`);
+        }
+
+        await this.prisma.rideOffer.updateMany({
+          where: { rideId, status: { in: ['pending', 'accepted'] } },
+          data: { status: 'rejected' },
+        });
+
+        const updated = (await this.prisma.ride.findUnique({ where: { id: rideId } }))!;
         try {
           this.realtimeService.emitRideStatusChanged(
-            { rideId, status: 'cancelled' },
+            { rideId, status: 'cancelled', timestamp: now.toISOString() },
             { passengerId: ride.passengerId, driverId: user.sub },
           );
         } catch (err) {
           // Log and continue
         }
+
+        // Phase 10: Asynchronous push notification to passenger
+        try {
+          this.notificationsService
+            .sendToUser(
+              ride.passengerId,
+              'Ride Cancelled',
+              'Your driver cancelled the ride. We apologize for the inconvenience.',
+              { type: 'ride_cancelled', rideId, cancelledBy: 'driver' },
+            )
+            .catch((pushErr) => this.logger.warn(`Push failed: ${pushErr?.message}`));
+        } catch (err) {
+          this.logger.warn(`Failed to dispatch push on driver cancel: ${err?.message}`);
+        }
+
         return updated;
       }
     }
@@ -957,25 +1121,65 @@ export class RidesService {
           ride.status !== 'offered' &&
           ride.status !== 'accepted'
         ) {
+          if (ride.status === 'cancelled') {
+            throw new ConflictException('Ride is already cancelled');
+          }
           throw new BadRequestException(
             `Passenger cannot cancel ride with status "${ride.status}"`,
           );
         }
-        const updated = await this.prisma.ride.update({
-          where: { id: rideId },
+
+        const now = new Date();
+        const updateResult = await this.prisma.ride.updateMany({
+          where: {
+            id: rideId,
+            passengerId: user.sub,
+            status: { in: ['requested', 'offered', 'accepted'] },
+          },
           data: {
             status: 'cancelled',
-            cancelledAt: new Date(),
+            cancelledAt: now,
           },
         });
+
+        if (updateResult.count === 0) {
+          const fresh = await this.prisma.ride.findUnique({ where: { id: rideId } });
+          if (!fresh) throw new NotFoundException('Ride not found');
+          if (fresh.status === 'cancelled') throw new ConflictException('Ride is already cancelled');
+          throw new BadRequestException(`Passenger cannot cancel ride with status "${fresh.status}"`);
+        }
+
+        await this.prisma.rideOffer.updateMany({
+          where: { rideId, status: { in: ['pending', 'accepted'] } },
+          data: { status: 'rejected' },
+        });
+
+        const updated = (await this.prisma.ride.findUnique({ where: { id: rideId } }))!;
         try {
           this.realtimeService.emitRideStatusChanged(
-            { rideId, status: 'cancelled' },
+            { rideId, status: 'cancelled', timestamp: now.toISOString() },
             { passengerId: ride.passengerId, driverId: ride.driverId ?? undefined },
           );
         } catch (err) {
           // Log and continue
         }
+
+        // Phase 10: Asynchronous push notification to driver (if assigned)
+        try {
+          if (ride.driverId) {
+            this.notificationsService
+              .sendToUser(
+                ride.driverId,
+                'Ride Cancelled',
+                'The passenger has cancelled the ride request.',
+                { type: 'ride_cancelled', rideId, cancelledBy: 'passenger' },
+              )
+              .catch((pushErr) => this.logger.warn(`Push failed: ${pushErr?.message}`));
+          }
+        } catch (err) {
+          this.logger.warn(`Failed to dispatch push on passenger cancel: ${err?.message}`);
+        }
+
         return updated;
       }
     }
@@ -983,6 +1187,79 @@ export class RidesService {
     throw new BadRequestException(
       `Transition to "${targetStatus}" is not permitted for role "${user.role}"`,
     );
+  }
+
+  async cancelRide(rideId: string, user: JwtPayload, _reason?: string) {
+    return this.updateRideStatus(rideId, user, { status: UpdateRideStatusEnum.cancelled });
+  }
+
+  async getPassengerRideHistory(
+    passengerId: string,
+    options?: { status?: string; page?: number; limit?: number },
+  ) {
+    const page = options?.page && options.page > 0 ? options.page : 1;
+    const limit = options?.limit && options.limit > 0 ? options.limit : 20;
+    const skip = (page - 1) * limit;
+
+    const where: any = {
+      passengerId,
+      status: options?.status
+        ? (options.status as any)
+        : { in: ['completed', 'cancelled'] },
+    };
+
+    const [rides, total] = await Promise.all([
+      this.prisma.ride.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { requestedAt: 'desc' },
+        include: {
+          driver: {
+            select: {
+              id: true,
+              name: true,
+              phone: true,
+              rating: true,
+              profilePhotoUrl: true,
+              vehicle: true,
+            },
+          },
+        },
+      }),
+      this.prisma.ride.count({ where }),
+    ]);
+
+    return {
+      rides: rides.map((ride) => ({
+        id: ride.id,
+        passengerId: ride.passengerId,
+        driverId: ride.driverId,
+        status: ride.status,
+        pickupAddress: ride.pickupAddress,
+        destinationAddress: ride.dropoffAddress,
+        dropoffAddress: ride.dropoffAddress,
+        pickupLat: ride.pickupLat,
+        pickupLng: ride.pickupLng,
+        dropoffLat: ride.dropoffLat,
+        dropoffLng: ride.dropoffLng,
+        distanceKm: ride.distanceKm,
+        etaMinutes: ride.etaMinutes,
+        proposedFare: Number(ride.proposedFare),
+        aiRecommendedFare: Number(ride.aiRecommendedFare),
+        finalFare: ride.finalFare ? Number(ride.finalFare) : null,
+        fare: Number(ride.finalFare ?? ride.proposedFare),
+        createdAt: ride.requestedAt.toISOString(),
+        requestedAt: ride.requestedAt.toISOString(),
+        startedAt: ride.startedAt ? ride.startedAt.toISOString() : null,
+        completedAt: ride.completedAt ? ride.completedAt.toISOString() : null,
+        cancelledAt: ride.cancelledAt ? ride.cancelledAt.toISOString() : null,
+        driver: ride.driver,
+      })),
+      total,
+      page,
+      limit,
+    };
   }
 
   async getDriverRideHistory(driverId: string, statusFilter?: string) {

@@ -2,13 +2,26 @@ import React from "react";
 import { View, Text, Pressable, ScrollView } from "react-native";
 import { useRouter } from "expo-router";
 import { MaterialIcons } from "@expo/vector-icons";
+import { useQuery } from "@tanstack/react-query";
 import { themeColors } from "@/constants/theme-colors";
 import { PassengerHeader } from "@/components/passenger/passenger-header";
 import { usePassengerAuthStore } from "@/store/passenger/passenger-auth-store";
+import { getPassengerRatings } from "@/lib/api/ratings";
 
 export default function PassengerProfileScreen() {
   const router = useRouter();
   const profile = usePassengerAuthStore((s) => s.profile);
+
+  const { data: ratingData } = useQuery({
+    queryKey: ["passenger", "ratings"],
+    queryFn: getPassengerRatings,
+    retry: 1,
+  });
+
+  const ratingDisplay =
+    ratingData && ratingData.totalRatings > 0
+      ? `${ratingData.averageRating.toFixed(1)} (${ratingData.totalRatings})`
+      : "5.0 (New)";
 
   return (
     <View className="flex-1 bg-background">
@@ -28,7 +41,7 @@ export default function PassengerProfileScreen() {
           </Text>
           <View className="flex-row items-center mt-2 bg-surface-container px-3 py-1 rounded-full">
             <MaterialIcons name="star" size={16} color="#f59e0b" />
-            <Text className="text-on-surface text-xs font-bold ml-1">4.95 Rating</Text>
+            <Text className="text-on-surface text-xs font-bold ml-1">{ratingDisplay}</Text>
           </View>
         </View>
 

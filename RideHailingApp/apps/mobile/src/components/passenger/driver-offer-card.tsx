@@ -8,6 +8,8 @@ export interface DriverOfferCardProps {
   offer: DriverOffer;
   onAccept: (offer: DriverOffer) => void;
   onDecline: (offerId: string) => void;
+  onCounter?: (offer: DriverOffer) => void;
+  aiSuggestionFare?: number;
   currencySymbol?: string;
 }
 
@@ -15,7 +17,9 @@ export function DriverOfferCard({
   offer,
   onAccept,
   onDecline,
-  currencySymbol = "$",
+  onCounter,
+  aiSuggestionFare,
+  currencySymbol = "PKR ",
 }: DriverOfferCardProps) {
   return (
     <View className="bg-surface rounded-2xl p-4 mb-3 border border-outline-variant/30 shadow-sm">
@@ -48,17 +52,41 @@ export function DriverOfferCard({
         </View>
       </View>
 
-      <View className="flex-row items-center mt-4 pt-3 border-t border-outline-variant/20">
+      {/* Advisory AI Smart Fare chip if available */}
+      {typeof aiSuggestionFare === "number" && aiSuggestionFare > 0 && (
+        <View className="mt-2.5 px-3 py-1.5 rounded-lg bg-primary/10 flex-row items-center justify-between">
+          <View className="flex-row items-center">
+            <MaterialIcons name="auto-awesome" size={14} color={themeColors.primary} />
+            <Text className="text-primary text-xs font-semibold ml-1.5">
+              AI Smart Fare Suggestion
+            </Text>
+          </View>
+          <Text className="text-primary text-xs font-bold">
+            {currencySymbol}{aiSuggestionFare.toFixed(2)}
+          </Text>
+        </View>
+      )}
+
+      <View className="flex-row items-center mt-4 pt-3 border-t border-outline-variant/20 gap-2">
         <Pressable
           onPress={() => onDecline(offer.id)}
-          className="flex-1 py-2.5 mr-2 rounded-xl bg-surface-container items-center justify-center active:scale-95"
+          className="flex-1 py-2.5 rounded-xl bg-surface-container items-center justify-center active:scale-95"
         >
           <Text className="text-secondary font-semibold text-sm">Decline</Text>
         </Pressable>
 
+        {onCounter && (
+          <Pressable
+            onPress={() => onCounter(offer)}
+            className="flex-1 py-2.5 rounded-xl bg-secondary-container items-center justify-center active:scale-95 border border-outline-variant/30"
+          >
+            <Text className="text-on-secondary-container font-semibold text-sm">Counter</Text>
+          </Pressable>
+        )}
+
         <Pressable
           onPress={() => onAccept(offer)}
-          className="flex-1 py-2.5 ml-2 rounded-xl bg-primary items-center justify-center active:scale-95"
+          className="flex-1 py-2.5 rounded-xl bg-primary items-center justify-center active:scale-95"
         >
           <Text className="text-white font-semibold text-sm">Accept</Text>
         </Pressable>

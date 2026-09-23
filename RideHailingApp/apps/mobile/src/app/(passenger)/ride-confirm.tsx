@@ -33,10 +33,12 @@ export default function PassengerRideConfirmScreen() {
     proposedFare,
     isCreatingRide,
     createRideError,
+    paymentMethod,
     setCreatedRideId,
     setIsCreatingRide,
     setCreateRideError,
     setRideStatus,
+    setPaymentMethod,
   } = usePassengerRideStore();
 
   const [localError, setLocalError] = useState<string | null>(null);
@@ -204,15 +206,76 @@ export default function PassengerRideConfirmScreen() {
             </View>
           </View>
 
-          {/* Payment method */}
-          <View style={styles.paymentRow}>
-            <View style={styles.visaChip}>
-              <Text style={styles.visaText}>VISA</Text>
+          {/* Payment method selector */}
+          <View style={styles.paymentContainer}>
+            <Text style={styles.paymentHeaderLabel}>PAYMENT METHOD</Text>
+            <View style={styles.paymentMethodRow}>
+              <Pressable
+                onPress={() => setPaymentMethod("cash")}
+                style={[
+                  styles.methodPill,
+                  paymentMethod === "cash" && styles.methodPillActive,
+                ]}
+              >
+                <MaterialIcons
+                  name="payments"
+                  size={16}
+                  color={paymentMethod === "cash" ? "#ffffff" : themeColors.onSurfaceVariant}
+                />
+                <Text
+                  style={[
+                    styles.methodPillText,
+                    paymentMethod === "cash" && styles.methodPillTextActive,
+                  ]}
+                >
+                  Cash
+                </Text>
+              </Pressable>
+
+              <Pressable
+                onPress={() => setPaymentMethod("wallet")}
+                style={[
+                  styles.methodPill,
+                  paymentMethod === "wallet" && styles.methodPillActive,
+                ]}
+              >
+                <MaterialIcons
+                  name="account-balance-wallet"
+                  size={16}
+                  color={paymentMethod === "wallet" ? "#ffffff" : themeColors.onSurfaceVariant}
+                />
+                <Text
+                  style={[
+                    styles.methodPillText,
+                    paymentMethod === "wallet" && styles.methodPillTextActive,
+                  ]}
+                >
+                  Wallet
+                </Text>
+              </Pressable>
+
+              <Pressable
+                onPress={() => setPaymentMethod("card")}
+                style={[
+                  styles.methodPill,
+                  paymentMethod === "card" && styles.methodPillActive,
+                ]}
+              >
+                <MaterialIcons
+                  name="credit-card"
+                  size={16}
+                  color={paymentMethod === "card" ? "#ffffff" : themeColors.onSurfaceVariant}
+                />
+                <Text
+                  style={[
+                    styles.methodPillText,
+                    paymentMethod === "card" && styles.methodPillTextActive,
+                  ]}
+                >
+                  Card
+                </Text>
+              </Pressable>
             </View>
-            <Text style={styles.paymentMask}>•••• 4242</Text>
-            <Pressable>
-              <Text style={styles.changeLink}>Change</Text>
-            </Pressable>
           </View>
 
           {/* Error Banner */}
@@ -522,40 +585,46 @@ const styles = StyleSheet.create({
     color: themeColors.onSurface,
   },
   // ── Payment ──
-  paymentRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
+  paymentContainer: {
     paddingHorizontal: 8,
     marginBottom: 16,
   },
-  visaChip: {
-    width: 40,
-    height: 24,
-    backgroundColor: themeColors.secondaryContainer,
-    borderRadius: 4,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  visaText: {
+  paymentHeaderLabel: {
     fontSize: 10,
     fontWeight: "700",
-    color: themeColors.primary,
-    letterSpacing: 0.5,
+    color: themeColors.onSurfaceVariant,
+    letterSpacing: 0.8,
+    marginBottom: 8,
   },
-  paymentMask: {
+  paymentMethodRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  methodPill: {
     flex: 1,
-    fontSize: 14,
-    fontWeight: "600",
-    color: themeColors.onSurface,
-    lineHeight: 20,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: themeColors.outlineVariant,
+    backgroundColor: themeColors.surface,
   },
-  changeLink: {
+  methodPillActive: {
+    borderColor: themeColors.primary,
+    backgroundColor: themeColors.primary,
+  },
+  methodPillText: {
     fontSize: 12,
     fontWeight: "600",
-    letterSpacing: 0.6,
-    color: themeColors.primary,
-    lineHeight: 16,
+    color: themeColors.onSurface,
+  },
+  methodPillTextActive: {
+    color: "#ffffff",
   },
   // ── CTA ──
   btnConfirm: {

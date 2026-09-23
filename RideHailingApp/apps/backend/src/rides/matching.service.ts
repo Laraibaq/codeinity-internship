@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 export const INITIAL_MATCH_RADIUS_KM = 10;
 export const MAX_MATCH_DRIVERS = 5;
@@ -53,6 +54,7 @@ export class MatchingService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly realtimeService: RealtimeService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   /**
@@ -212,7 +214,7 @@ export class MatchingService {
       }
 
       return offers;
-    });
+    }, { timeout: 15000, maxWait: 10000 });
 
     this.logger.log(`Created ${createdOffers.length} ride offers for ride ${rideId}`);
 
@@ -257,6 +259,28 @@ export class MatchingService {
       }
     } catch (realtimeErr) {
       this.logger.warn(`Failed to emit realtime events for ride ${rideId}:`, realtimeErr);
+    }
+
+    // Phase 10: Asynchronous, failure-isolated push notifications for matched drivers
+    try {
+      for (const offer of createdOffers) {
+        this.notificationsService
+          .sendToUser(
+            offer.driverId,
+            'New Ride Request Nearby',
+            `New ride request from ${ride.pickupAddress || 'pickup location'} to ${ride.dropoffAddress || 'destination'}`,
+            {
+              type: 'ride_offer',
+              rideId,
+              offerId: offer.id,
+            },
+          )
+          .catch((pushErr) => {
+            this.logger.warn(`Failed to send push notification for offer ${offer.id}: ${pushErr?.message}`);
+          });
+      }
+    } catch (err) {
+      this.logger.warn(`Error triggering push notifications for ride ${rideId}:`, err);
     }
 
     return {

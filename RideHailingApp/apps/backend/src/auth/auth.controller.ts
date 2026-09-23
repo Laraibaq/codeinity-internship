@@ -17,16 +17,19 @@ import { RegisterPassengerDto } from './dto/register-passenger.dto';
 // minute per IP is generous for a genuine user retrying a typo, restrictive for a brute-force
 // script.
 const AUTH_ABUSE_THROTTLE = { default: { limit: 5, ttl: 60_000 } };
+const REGISTER_THROTTLE = { default: { limit: 20, ttl: 60_000 } };
 
 @Controller('auth')
 export class AuthController {
   constructor(private readonly auth: AuthService) {}
 
+  @Throttle(REGISTER_THROTTLE)
   @Post('register/driver')
   registerDriver(@Body() dto: RegisterDriverDto) {
     return this.auth.registerDriver(dto);
   }
 
+  @Throttle(REGISTER_THROTTLE)
   @Post('register/passenger')
   registerPassenger(@Body() dto: RegisterPassengerDto) {
     return this.auth.registerPassenger(dto);
@@ -39,6 +42,7 @@ export class AuthController {
     return this.auth.requestOtp(dto);
   }
 
+  @Throttle(AUTH_ABUSE_THROTTLE)
   @Post('otp/verify')
   @HttpCode(HttpStatus.OK)
   verifyOtp(@Body() dto: OtpVerifyDto) {
@@ -50,6 +54,13 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   login(@Body() dto: LoginDto) {
     return this.auth.login(dto);
+  }
+
+  @Throttle(AUTH_ABUSE_THROTTLE)
+  @Post('admin/login')
+  @HttpCode(HttpStatus.OK)
+  loginAdmin(@Body() dto: LoginDto) {
+    return this.auth.loginAdmin(dto);
   }
 
   @Post('refresh')
@@ -65,12 +76,14 @@ export class AuthController {
     return this.auth.requestPasswordReset(dto);
   }
 
+  @Throttle(AUTH_ABUSE_THROTTLE)
   @Post('password-reset/verify')
   @HttpCode(HttpStatus.OK)
   verifyPasswordReset(@Body() dto: PasswordResetVerifyDto) {
     return this.auth.verifyPasswordReset(dto);
   }
 
+  @Throttle(AUTH_ABUSE_THROTTLE)
   @Post('password-reset/confirm')
   @HttpCode(HttpStatus.OK)
   confirmPasswordReset(@Body() dto: PasswordResetConfirmDto) {

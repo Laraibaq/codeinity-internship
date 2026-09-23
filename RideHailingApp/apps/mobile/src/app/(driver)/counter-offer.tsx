@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { ActivityIndicator, LayoutAnimation, Pressable, Text, View } from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -6,6 +6,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { themeColors } from "@/constants/theme-colors";
 import { formatCurrency } from "@/utils/currency";
 import { apiClient } from "@/lib/api-client";
+import { negotiationApi, type AiFareSuggestion } from "@/lib/api/negotiation";
 
 const STEP = 0.5;
 
@@ -58,15 +59,29 @@ export default function CounterOfferScreen() {
   );
   const [phase, setPhase] = useState<"form" | "sent">("form");
   const [isSending, setIsSending] = useState(false);
+  const [aiSuggestion, setAiSuggestion] = useState<AiFareSuggestion | null>(null);
+
+  useEffect(() => {
+    if (params.rideId && !params.rideId.startsWith("req-")) {
+      negotiationApi
+        .getFareSuggestion(params.rideId)
+        .then((res) => setAiSuggestion(res))
+        .catch(() => {});
+    }
+  }, [params.rideId]);
 
   const handleSendCounterOffer = async () => {
     setIsSending(true);
     try {
       if (params.rideId && !params.rideId.startsWith("req-")) {
-        await apiClient.post(`/rides/${params.rideId}/offers`, {
-          offerType: "counter",
-          offerAmount: fare,
-        });
+        try {
+          await negotiationApi.driverCounter(params.rideId, fare);
+        } catch {
+          await apiClient.post(`/rides/${params.rideId}/offers`, {
+            offerType: "counter",
+            offerAmount: fare,
+          });
+        }
       }
       LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
       setPhase("sent");
@@ -119,12 +134,13 @@ export default function CounterOfferScreen() {
               </View>
 
               <View className="mt-stack-sm flex-row items-center gap-2 rounded-full border border-primary-fixed/50 bg-inverse-on-surface px-4 py-2">
-                <MaterialIcons name="insights" size={18} color={themeColors.primary} />
+                <MaterialIcons name={aiSuggestion ? "auto-awesome" : "insights"} size={18} color={themeColors.primary} />
                 <Text className="font-label-sm text-label-sm text-on-surface-variant">
-                  Market Range:{" "}
-                  <Text className="text-primary">
-                    {formatCurrency(14)} - {formatCurrency(18)}
+                  {aiSuggestion ? "AI Market Range: " : "Market Range: "}
+                  <Text className="text-primary font-semibold">
+                    {formatCurrency(aiSuggestion?.minBound ?? 14)} - {formatCurrency(aiSuggestion?.maxBound ?? 18)}
                   </Text>
+                  {aiSuggestion ? " (Advisory)" : ""}
                 </Text>
               </View>
             </View>

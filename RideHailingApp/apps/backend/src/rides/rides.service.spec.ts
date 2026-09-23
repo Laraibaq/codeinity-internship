@@ -8,6 +8,7 @@ import { CreateRideDto } from './dto/create-ride.dto';
 import { UpdateRideStatusEnum } from './dto/update-ride-status.dto';
 import { MatchingService } from './matching.service';
 import { RealtimeService } from '../realtime/realtime.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 describe('RidesService & RidesController (Phase 10 Comprehensive)', () => {
   let ridesService: RidesService;
@@ -15,6 +16,7 @@ describe('RidesService & RidesController (Phase 10 Comprehensive)', () => {
   let prisma: any;
   let matchingService: any;
   let realtimeService: any;
+  let notificationsService: any;
 
   const mockPassengerId = '11111111-1111-1111-1111-111111111111';
   const mockOtherPassengerId = '22222222-2222-2222-2222-222222222222';
@@ -49,7 +51,8 @@ describe('RidesService & RidesController (Phase 10 Comprehensive)', () => {
         findFirst: jest.fn().mockResolvedValue(null),
         findMany: jest.fn(),
         update: jest.fn(),
-        updateMany: jest.fn(),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+        count: jest.fn().mockResolvedValue(1),
       },
       rideOffer: {
         create: jest.fn(),
@@ -72,6 +75,13 @@ describe('RidesService & RidesController (Phase 10 Comprehensive)', () => {
       emitRideStatusChanged: jest.fn(),
     };
 
+    notificationsService = {
+      sendToUser: jest.fn().mockResolvedValue({ sent: 1, failed: 0 }),
+      sendToUsers: jest.fn().mockResolvedValue([]),
+      registerDeviceToken: jest.fn().mockResolvedValue({ success: true }),
+      removeDeviceToken: jest.fn().mockResolvedValue({ success: true, count: 1 }),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       controllers: [RidesController],
       providers: [
@@ -90,6 +100,10 @@ describe('RidesService & RidesController (Phase 10 Comprehensive)', () => {
         {
           provide: RealtimeService,
           useValue: realtimeService,
+        },
+        {
+          provide: NotificationsService,
+          useValue: notificationsService,
         },
       ],
     }).compile();
@@ -399,16 +413,18 @@ describe('RidesService & RidesController (Phase 10 Comprehensive)', () => {
 
   describe('10. Assigned driver can start ride', () => {
     it('updates status from accepted to ongoing and sets startedAt', async () => {
-      prisma.ride.findUnique.mockResolvedValue({
-        id: mockRideId,
-        driverId: mockDriverId,
-        status: 'accepted',
-      });
-      prisma.ride.update.mockResolvedValue({
-        id: mockRideId,
-        status: 'ongoing',
-        startedAt: new Date(),
-      });
+      prisma.ride.findUnique
+        .mockResolvedValueOnce({
+          id: mockRideId,
+          driverId: mockDriverId,
+          status: 'accepted',
+        })
+        .mockResolvedValueOnce({
+          id: mockRideId,
+          status: 'ongoing',
+          startedAt: new Date(),
+        });
+      prisma.ride.updateMany.mockResolvedValue({ count: 1 });
 
       const result = await ridesService.updateRideStatus(
         mockRideId,
@@ -416,8 +432,9 @@ describe('RidesService & RidesController (Phase 10 Comprehensive)', () => {
         { status: UpdateRideStatusEnum.ongoing },
       );
 
-      expect(prisma.ride.update).toHaveBeenCalledWith(
+      expect(prisma.ride.updateMany).toHaveBeenCalledWith(
         expect.objectContaining({
+          where: expect.objectContaining({ id: mockRideId, status: 'accepted' }),
           data: expect.objectContaining({ status: 'ongoing' }),
         }),
       );
@@ -445,16 +462,18 @@ describe('RidesService & RidesController (Phase 10 Comprehensive)', () => {
 
   describe('12. Assigned driver can complete ongoing ride', () => {
     it('updates status from ongoing to completed and sets completedAt', async () => {
-      prisma.ride.findUnique.mockResolvedValue({
-        id: mockRideId,
-        driverId: mockDriverId,
-        status: 'ongoing',
-      });
-      prisma.ride.update.mockResolvedValue({
-        id: mockRideId,
-        status: 'completed',
-        completedAt: new Date(),
-      });
+      prisma.ride.findUnique
+        .mockResolvedValueOnce({
+          id: mockRideId,
+          driverId: mockDriverId,
+          status: 'ongoing',
+        })
+        .mockResolvedValueOnce({
+          id: mockRideId,
+          status: 'completed',
+          completedAt: new Date(),
+        });
+      prisma.ride.updateMany.mockResolvedValue({ count: 1 });
 
       const result = await ridesService.updateRideStatus(
         mockRideId,
@@ -462,8 +481,9 @@ describe('RidesService & RidesController (Phase 10 Comprehensive)', () => {
         { status: UpdateRideStatusEnum.completed },
       );
 
-      expect(prisma.ride.update).toHaveBeenCalledWith(
+      expect(prisma.ride.updateMany).toHaveBeenCalledWith(
         expect.objectContaining({
+          where: expect.objectContaining({ id: mockRideId, status: 'ongoing' }),
           data: expect.objectContaining({ status: 'completed' }),
         }),
       );
@@ -491,16 +511,18 @@ describe('RidesService & RidesController (Phase 10 Comprehensive)', () => {
 
   describe('14. Driver can cancel where allowed', () => {
     it('cancels accepted ride when called by assigned driver', async () => {
-      prisma.ride.findUnique.mockResolvedValue({
-        id: mockRideId,
-        driverId: mockDriverId,
-        status: 'accepted',
-      });
-      prisma.ride.update.mockResolvedValue({
-        id: mockRideId,
-        status: 'cancelled',
-        cancelledAt: new Date(),
-      });
+      prisma.ride.findUnique
+        .mockResolvedValueOnce({
+          id: mockRideId,
+          driverId: mockDriverId,
+          status: 'accepted',
+        })
+        .mockResolvedValueOnce({
+          id: mockRideId,
+          status: 'cancelled',
+          cancelledAt: new Date(),
+        });
+      prisma.ride.updateMany.mockResolvedValue({ count: 1 });
 
       const result = await ridesService.updateRideStatus(
         mockRideId,
@@ -597,12 +619,12 @@ describe('RidesService & RidesController (Phase 10 Comprehensive)', () => {
     });
   });
 
-  describe('18. Non-driver cannot access ride history', () => {
-    it('throws ForbiddenException when role is passenger', () => {
+  describe('18. Non-driver and non-passenger cannot access ride history', () => {
+    it('throws ForbiddenException when role is unknown', () => {
       expect(() =>
-        ridesController.getDriverRideHistory({
+        ridesController.getRideHistory({
           sub: mockPassengerId,
-          role: 'passenger',
+          role: 'unknown' as any,
         } as any),
       ).toThrow(ForbiddenException);
     });

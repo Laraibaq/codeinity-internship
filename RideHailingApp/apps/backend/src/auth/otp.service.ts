@@ -27,8 +27,16 @@ export class OtpService {
       expiresAt: Date.now() + OTP_TTL_MS,
     });
 
-    // TODO: replace with a real SMS/email send (Twilio or a local gateway) once one is wired up.
-    console.log(`[otp:${purpose}] code for ${identifier}: ${code} (expires in 5 min)`);
+    // In production, never leak plaintext OTP codes to logs.
+    if (process.env.NODE_ENV === 'production') {
+      const maskedId =
+        identifier.length > 5
+          ? `${identifier.slice(0, 3)}***${identifier.slice(-2)}`
+          : '***';
+      console.log(`[otp:${purpose}] OTP code dispatched to ${maskedId} (code redacted in production)`);
+    } else {
+      console.log(`[otp:${purpose}] code for ${identifier}: ${code} (expires in 5 min)`);
+    }
 
     return code;
   }

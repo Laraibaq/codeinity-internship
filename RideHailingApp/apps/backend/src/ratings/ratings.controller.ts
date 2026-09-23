@@ -29,6 +29,14 @@ export class RatingsController {
     return this.ratingsService.getDriverRatings(user.sub);
   }
 
+  @Get('passengers/me/ratings')
+  getPassengerRatings(@CurrentUser() user: JwtPayload) {
+    if (user.role !== 'passenger') {
+      throw new ForbiddenException('Only passengers can access passenger ratings');
+    }
+    return this.ratingsService.getPassengerRatings(user.sub);
+  }
+
   @Post('rides/:id/rate')
   @HttpCode(HttpStatus.CREATED)
   rateRide(

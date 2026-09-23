@@ -32,6 +32,7 @@ export interface RideAcceptedEvent {
 export interface RideStatusChangedEvent {
   rideId: string;
   status: string;
+  timestamp?: string;
 }
 
 export interface DriverLocationUpdatedEvent {
@@ -41,5 +42,47 @@ export interface DriverLocationUpdatedEvent {
   lng: number;
   timestamp: string;
   accuracy?: number;
+}
+
+export interface PaymentStatusChangedEvent {
+  paymentId: string;
+  rideId: string;
+  status: string;
+  amount: number;
+  currency: string;
+  paymentMethod: string;
+  paidAt?: string;
+}
+
+export interface NegotiationOfferCreatedEvent {
+  negotiationId: string;
+  rideId: string;
+  offerId: string;
+  proposerId: string;
+  recipientId: string;
+  proposerRole: 'passenger' | 'driver';
+  amount: number;
+  currency: string;
+  type: string;
+  reason?: string;
+  expiresAt: string;
+}
+
+export interface NegotiationAcceptedEvent {
+  negotiationId: string;
+  rideId: string;
+  offerId: string;
+  driverId: string;
+  passengerId: string;
+  finalFare: number;
+  currency: string;
+  acceptedAt: string;
+}
+
+export interface NegotiationRejectedEvent {
+  negotiationId: string;
+  rideId: string;
+  rejectedBy: string;
+  reason?: string;
 }
 

@@ -8,11 +8,13 @@ import { UpdateLocationDto } from './dto/update-location.dto';
 import { UpdateDriverStatusDto } from './dto/update-driver-status.dto';
 import { UpdateDriverProfileDto } from './dto/update-driver-profile.dto';
 import { UpdateVehicleDto, VehicleTypeEnum } from './dto/update-vehicle.dto';
+import { RealtimeService } from '../realtime/realtime.service';
 
 describe('DriversService & DriversController (Location & Status)', () => {
   let driversService: DriversService;
   let driversController: DriversController;
   let prisma: any;
+  let realtimeService: any;
 
   const mockDriverId = '33333333-3333-3333-3333-333333333333';
   const mockPassengerId = '11111111-1111-1111-1111-111111111111';
@@ -27,6 +29,13 @@ describe('DriversService & DriversController (Location & Status)', () => {
         upsert: jest.fn(),
         findUnique: jest.fn(),
       },
+      ride: {
+        findFirst: jest.fn().mockResolvedValue(null),
+      },
+    };
+
+    realtimeService = {
+      emitDriverLocationUpdated: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -42,6 +51,10 @@ describe('DriversService & DriversController (Location & Status)', () => {
           useValue: {
             uploadDriverDocument: jest.fn(),
           },
+        },
+        {
+          provide: RealtimeService,
+          useValue: realtimeService,
         },
       ],
     }).compile();

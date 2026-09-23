@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsNumber, Max, Min } from 'class-validator';
+import { IsNumber, IsOptional, IsString, Max, Min } from 'class-validator';
 
 export class UpdateLocationDto {
   @Type(() => Number)
@@ -13,4 +13,14 @@ export class UpdateLocationDto {
   @Min(-180, { message: 'Longitude must be between -180 and 180' })
   @Max(180, { message: 'Longitude must be between -180 and 180' })
   longitude: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  accuracy?: number;
+
+  @IsOptional()
+  @IsString()
+  timestamp?: string;
 }
+

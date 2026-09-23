@@ -21,6 +21,7 @@ enum VerificationStatus {
   pending
   approved
   rejected
+  suspended
 }
 
 enum VehicleType {
@@ -56,6 +57,28 @@ enum RatingRole {
   driver
 }
 
+enum NegotiationStatus {
+  active
+  accepted
+  rejected
+  expired
+  cancelled
+}
+
+enum NegotiationOfferType {
+  initial
+  counter
+  accept
+}
+
+enum NegotiationOfferStatus {
+  pending
+  accepted
+  rejected
+  expired
+  superseded
+}
+
 // Passengers.
 model User {
   id              String   @id @default(uuid()) @db.Uuid
@@ -70,7 +93,8 @@ model User {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  rides Ride[] @relation("PassengerRides")
+  rides        Ride[]        @relation("PassengerRides")
+  negotiations Negotiation[]
 
   @@map("users")
 }
@@ -101,6 +125,7 @@ model Driver {
   vehicle        Vehicle?
   rides          Ride[]          @relation("DriverRides")
   rideOffers     RideOffer[]
+  negotiations   Negotiation[]
   notifications  Notification[]
   supportTickets SupportTicket[]
 
@@ -151,11 +176,14 @@ model Ride {
   completedAt       DateTime?
   cancelledAt       DateTime?
 
-  passenger      User            @relation("PassengerRides", fields: [passengerId], references: [id])
-  driver         Driver?         @relation("DriverRides", fields: [driverId], references: [id])
-  offers         RideOffer[]
-  ratings        Rating[]
-  supportTickets SupportTicket[]
+  passenger         User               @relation("PassengerRides", fields: [passengerId], references: [id])
+  driver            Driver?            @relation("DriverRides", fields: [driverId], references: [id])
+  offers            RideOffer[]
+  negotiations      Negotiation[]
+  negotiationOffers NegotiationOffer[]
+  ratings           Rating[]
+  supportTickets    SupportTicket[]
+  payment           Payment?
 
   @@map("rides")
 }
@@ -190,6 +218,7 @@ model Rating {
 
   ride Ride @relation(fields: [rideId], references: [id])
 
+  @@unique([rideId, fromUserId])
   @@map("ratings")
 }
 
@@ -243,5 +272,193 @@ model SupportTicket {
   ride   Ride?  @relation(fields: [rideId], references: [id])
 
   @@map("support_tickets")
+}
+
+model DeviceToken {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @db.Uuid
+  userRole   String
+  token      String   @unique
+  platform   String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  lastSeenAt DateTime @default(now())
+
+  @@index([userId])
+  @@map("device_tokens")
+}
+
+enum PaymentStatus {
+  pending
+  processing
+  succeeded
+  failed
+  refunded
+  partially_refunded
+}
+
+enum PaymentMethod {
+  cash
+  wallet
+  card
+}
+
+enum LedgerEntryType {
+  credit
+  debit
+}
+
+enum LedgerReferenceType {
+  ride_payment
+  driver_earning
+  refund
+  topup
+  platform_fee
+}
+
+model Payment {
+  id                String        @id @default(uuid()) @db.Uuid
+  rideId            String        @unique @db.Uuid
+  passengerId       String        @db.Uuid
+  driverId          String        @db.Uuid
+  amount            Decimal       @db.Decimal(10, 2)
+  currency          String        @default("PKR")
+  paymentMethod     PaymentMethod @default(cash)
+  status            PaymentStatus @default(pending)
+  provider          String?
+  providerPaymentId String?
+  idempotencyKey    String?       @unique
+  failureReason     String?
+  refundedAmount    Decimal       @default(0.00) @db.Decimal(10, 2)
+  paidAt            DateTime?
+  failedAt          DateTime?
+  refundedAt        DateTime?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  ride Ride @relation(fields: [rideId], references: [id])
+
+  @@index([passengerId])
+  @@index([driverId])
+  @@index([status])
+  @@map("payments")
+}
+
+model Wallet {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @unique @db.Uuid
+  userRole  String
+  balance   Decimal  @default(0.00) @db.Decimal(10, 2)
+  currency  String   @default("PKR")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  transactions WalletTransaction[]
+
+  @@map("wallets")
+}
+
+model WalletTransaction {
+  id             String              @id @default(uuid()) @db.Uuid
+  walletId       String              @db.Uuid
+  userId         String              @db.Uuid
+  type           LedgerEntryType
+  amount         Decimal             @db.Decimal(10, 2)
+  currency       String              @default("PKR")
+  referenceType  LedgerReferenceType
+  referenceId    String?
+  balanceBefore  Decimal             @db.Decimal(10, 2)
+  balanceAfter   Decimal             @db.Decimal(10, 2)
+  idempotencyKey String?             @unique
+  description    String?
+  createdAt      DateTime            @default(now())
+
+  wallet Wallet @relation(fields: [walletId], references: [id])
+
+  @@index([userId])
+  @@index([walletId])
+  @@map("wallet_transactions")
+}
+
+model Negotiation {
+  id                String            @id @default(uuid()) @db.Uuid
+  rideId            String            @db.Uuid
+  driverId          String            @db.Uuid
+  passengerId       String            @db.Uuid
+  status            NegotiationStatus @default(active)
+  currentAmount     Decimal           @db.Decimal(10, 2)
+  currentProposerId String            @db.Uuid
+  acceptedAt        DateTime?
+  expiresAt         DateTime
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  ride        Ride               @relation(fields: [rideId], references: [id])
+  driver      Driver             @relation(fields: [driverId], references: [id])
+  passenger   User               @relation(fields: [passengerId], references: [id])
+  offers      NegotiationOffer[]
+
+  @@unique([rideId, driverId])
+  @@index([rideId])
+  @@index([driverId])
+  @@index([passengerId])
+  @@index([status])
+  @@map("negotiations")
+}
+
+model NegotiationOffer {
+  id             String                 @id @default(uuid()) @db.Uuid
+  negotiationId  String                 @db.Uuid
+  rideId         String                 @db.Uuid
+  proposerId     String                 @db.Uuid
+  recipientId    String                 @db.Uuid
+  amount         Decimal                @db.Decimal(10, 2)
+  type           NegotiationOfferType   @default(counter)
+  status         NegotiationOfferStatus @default(pending)
+  reason         String?
+  idempotencyKey String?                @unique
+  expiresAt      DateTime
+  createdAt      DateTime               @default(now())
+
+  negotiation Negotiation @relation(fields: [negotiationId], references: [id])
+  ride        Ride        @relation(fields: [rideId], references: [id])
+
+  @@index([negotiationId])
+  @@index([rideId])
+  @@index([proposerId])
+  @@index([status])
+  @@map("negotiation_offers")
+}
+
+model Admin {
+  id           String     @id @default(uuid()) @db.Uuid
+  email        String     @unique
+  passwordHash String
+  name         String
+  role         String     @default("admin")
+  isActive     Boolean    @default(true)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  auditLogs    AuditLog[]
+
+  @@map("admins")
+}
+
+model AuditLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  adminId    String   @db.Uuid
+  action     String
+  entityType String
+  entityId   String
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  admin      Admin    @relation(fields: [adminId], references: [id])
+
+  @@index([adminId])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@map("audit_logs")
 }
 

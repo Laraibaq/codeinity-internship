@@ -16,7 +16,30 @@ import type { JwtPayload } from '../auth/jwt-payload.interface';
 
 @WebSocketGateway({
   cors: {
-    origin: '*',
+    origin: (
+      origin: string | undefined,
+      callback: (err: Error | null, allow?: boolean) => void,
+    ) => {
+      // Mobile native apps / server-side socket clients send no Origin header
+      if (!origin || process.env.NODE_ENV !== 'production') {
+        return callback(null, true);
+      }
+      const configuredOrigins = process.env.CORS_ALLOWED_ORIGINS
+        ? process.env.CORS_ALLOWED_ORIGINS.split(',').map((o) => o.trim())
+        : [];
+      const defaultOrigins = [
+        'http://localhost:5173',
+        'http://127.0.0.1:5173',
+        'http://localhost:3000',
+        'http://127.0.0.1:3000',
+      ];
+      const allowed = new Set([...configuredOrigins, ...defaultOrigins]);
+      if (allowed.has(origin)) {
+        return callback(null, true);
+      }
+      return callback(new Error(`WebSocket CORS origin '${origin}' not allowed`), false);
+    },
+    credentials: true,
   },
 })
 export class RealtimeGateway

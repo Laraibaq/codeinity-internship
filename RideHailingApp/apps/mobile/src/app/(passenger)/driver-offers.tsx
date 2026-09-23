@@ -6,6 +6,8 @@ import {
   Pressable,
   StyleSheet,
   StatusBar,
+  Modal,
+  ActivityIndicator,
 } from "react-native";
 import Animated, {
   useSharedValue,
@@ -32,6 +34,7 @@ import { passengerOffersApi } from "@/lib/api/passenger/offers";
 import { DriverOfferCard } from "@/components/passenger/driver-offer-card";
 import { apiClient } from "@/lib/api-client";
 import { socketClient } from "@/lib/realtime/socket-client";
+import { negotiationApi, type AiFareSuggestion } from "@/lib/api/negotiation";
 
 export default function PassengerDriverOffersScreen() {
   const router = useRouter();
@@ -49,6 +52,10 @@ export default function PassengerDriverOffersScreen() {
   const [state, setState] = useState<SearchState>("searching");
   const [isAccepting, setIsAccepting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [aiSuggestion, setAiSuggestion] = useState<AiFareSuggestion | null>(null);
+  const [counteringOffer, setCounteringOffer] = useState<DriverOffer | null>(null);
+  const [counterFare, setCounterFare] = useState<number>(0);
+  const [isSubmittingCounter, setIsSubmittingCounter] = useState(false);
 
   const effectiveRideId = createdRideId || currentRideId;
 
@@ -158,6 +165,14 @@ export default function PassengerDriverOffersScreen() {
     // Initial fetch
     fetchOffersAndStatus();
 
+    // Fetch advisory fare suggestion
+    negotiationApi
+      .getFareSuggestion(effectiveRideId)
+      .then((sugg) => {
+        if (isMounted) setAiSuggestion(sugg);
+      })
+      .catch(() => {});
+
     // Connect socket and join ride room
     socketClient.connect().then(() => {
       if (isMounted) {
@@ -176,6 +191,8 @@ export default function PassengerDriverOffersScreen() {
     const unsubOfferUpdated = socketClient.on("ride:offer-updated", handleRealtimeUpdate);
     const unsubRideAccepted = socketClient.on("ride:accepted", handleRealtimeUpdate);
     const unsubStatusChanged = socketClient.on("ride:status-changed", handleRealtimeUpdate);
+    const unsubNegCreated = socketClient.on("negotiation:offer-created", handleRealtimeUpdate);
+    const unsubNegAccepted = socketClient.on("negotiation:accepted", handleRealtimeUpdate);
 
     // Fallback polling every 4 seconds
     pollInterval = setInterval(fetchOffersAndStatus, 4000);
@@ -193,6 +210,8 @@ export default function PassengerDriverOffersScreen() {
       unsubOfferUpdated();
       unsubRideAccepted();
       unsubStatusChanged();
+      unsubNegCreated();
+      unsubNegAccepted();
       socketClient.leaveRoom(`ride:${effectiveRideId}`);
       if (pollInterval) clearInterval(pollInterval);
       if (timeoutTimer) clearTimeout(timeoutTimer);
@@ -270,6 +289,35 @@ export default function PassengerDriverOffersScreen() {
       setOffers(offers.filter((o) => o.id !== offerId));
     } catch (err) {
       console.warn("Failed to decline offer:", err);
+    }
+  };
+
+  const handleCounterOffer = (offer: DriverOffer) => {
+    setCounteringOffer(offer);
+    const mid = Math.round(((offer.offeredFare + (proposedFare || offer.offeredFare)) / 2) * 10) / 10;
+    setCounterFare(mid > 0 ? mid : offer.offeredFare);
+  };
+
+  const handleSubmitCounter = async () => {
+    if (!effectiveRideId || !counteringOffer || isSubmittingCounter) return;
+    setIsSubmittingCounter(true);
+    try {
+      await negotiationApi.passengerCounter(
+        effectiveRideId,
+        counteringOffer.driverId,
+        counterFare,
+      );
+      setCounteringOffer(null);
+      // Refresh offers
+      const updated = await passengerOffersApi.getRidesOffers(effectiveRideId);
+      setOffers(updated.filter((o: any) => o.status === "pending"));
+    } catch (err: any) {
+      console.error("Failed to submit counter offer:", err);
+      const msg = err?.response?.data?.message || "Failed to submit counter offer.";
+      setErrorMessage(msg);
+      setCounteringOffer(null);
+    } finally {
+      setIsSubmittingCounter(false);
     }
   };
 
@@ -398,6 +446,8 @@ export default function PassengerDriverOffersScreen() {
                   offer={offer}
                   onAccept={handleAcceptOffer}
                   onDecline={handleDeclineOffer}
+                  onCounter={handleCounterOffer}
+                  aiSuggestionFare={aiSuggestion?.suggestedFare}
                 />
               ))}
             </View>
@@ -439,6 +489,71 @@ export default function PassengerDriverOffersScreen() {
           </View>
         )}
       </View>
+
+      {/* Passenger Counter Offer Modal */}
+      <Modal
+        visible={counteringOffer !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setCounteringOffer(null)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalDragHandle} />
+            <Text style={styles.modalTitle}>Counter Offer</Text>
+            <Text style={styles.modalSubtitle}>
+              Propose a counter fare to {counteringOffer?.driverName}
+            </Text>
+
+            <View style={styles.counterStepperRow}>
+              <Pressable
+                onPress={() => setCounterFare((v) => Math.max(1, Math.round((v - 0.5) * 10) / 10))}
+                style={styles.stepperBtn}
+              >
+                <MaterialIcons name="remove" size={24} color={themeColors.primary} />
+              </Pressable>
+              <Text style={styles.counterFareText}>
+                ${counterFare.toFixed(2)}
+              </Text>
+              <Pressable
+                onPress={() => setCounterFare((v) => Math.round((v + 0.5) * 10) / 10)}
+                style={styles.stepperBtn}
+              >
+                <MaterialIcons name="add" size={24} color={themeColors.primary} />
+              </Pressable>
+            </View>
+
+            {aiSuggestion && (
+              <View style={styles.modalAiBadge}>
+                <MaterialIcons name="auto-awesome" size={14} color={themeColors.primary} />
+                <Text style={styles.modalAiText}>
+                  AI Range: ${aiSuggestion.minBound.toFixed(0)} - ${aiSuggestion.maxBound.toFixed(0)} (Advisory)
+                </Text>
+              </View>
+            )}
+
+            <View style={styles.modalActionRow}>
+              <Pressable
+                onPress={() => setCounteringOffer(null)}
+                style={styles.modalCancelBtn}
+              >
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                onPress={handleSubmitCounter}
+                disabled={isSubmittingCounter}
+                style={[styles.modalSubmitBtn, isSubmittingCounter && { opacity: 0.6 }]}
+              >
+                {isSubmittingCounter ? (
+                  <ActivityIndicator size="small" color="#ffffff" />
+                ) : (
+                  <Text style={styles.modalSubmitText}>Send Counter</Text>
+                )}
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -822,6 +937,116 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: ERROR_COLOR,
     flex: 1,
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "flex-end",
+  },
+  modalContent: {
+    backgroundColor: themeColors.surface,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingHorizontal: 24,
+    paddingTop: 12,
+    paddingBottom: 36,
+    alignItems: "center",
+  },
+  modalDragHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: themeColors.outlineVariant,
+    marginBottom: 16,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: themeColors.onSurface,
+    marginBottom: 4,
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    color: themeColors.onSurfaceVariant,
+    marginBottom: 20,
+    textAlign: "center",
+  },
+  counterStepperRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 20,
+    backgroundColor: themeColors.surfaceContainer,
+    borderRadius: 24,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    width: "100%",
+    marginBottom: 16,
+  },
+  stepperBtn: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: themeColors.surfaceContainerLowest,
+    alignItems: "center",
+    justifyContent: "center",
+    elevation: 2,
+    shadowColor: "#000",
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+  },
+  counterFareText: {
+    fontSize: 32,
+    fontWeight: "800",
+    color: themeColors.primary,
+    minWidth: 120,
+    textAlign: "center",
+  },
+  modalAiBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "rgba(0, 102, 137, 0.08)",
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    borderRadius: 20,
+    marginBottom: 20,
+  },
+  modalAiText: {
+    fontSize: 12,
+    color: themeColors.primary,
+    fontWeight: "600",
+  },
+  modalActionRow: {
+    flexDirection: "row",
+    gap: 12,
+    width: "100%",
+  },
+  modalCancelBtn: {
+    flex: 1,
+    height: 50,
+    borderRadius: 14,
+    backgroundColor: themeColors.surfaceContainerHigh,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  modalCancelText: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: themeColors.onSurface,
+  },
+  modalSubmitBtn: {
+    flex: 1,
+    height: 50,
+    borderRadius: 14,
+    backgroundColor: themeColors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  modalSubmitText: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#ffffff",
   },
 });
 

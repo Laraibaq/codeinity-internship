@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Image, Pressable, StyleSheet, Text, View } from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -63,11 +63,23 @@ export default function ActiveRideScreen() {
     dropoffLng?: string;
   }>();
 
-  const { latitude: driverLat, longitude: driverLng } = useLocationStore();
+  const {
+    latitude: driverLat,
+    longitude: driverLng,
+    startActiveRideTracking,
+    stopActiveRideTracking,
+  } = useLocationStore();
+
   const driverLocation =
     driverLat != null && driverLng != null
       ? { latitude: driverLat, longitude: driverLng }
       : undefined;
+
+  useEffect(() => {
+    if (params.rideId && !params.rideId.startsWith("req-")) {
+      startActiveRideTracking(params.rideId);
+    }
+  }, [params.rideId, startActiveRideTracking]);
 
   const parsedDropoffLat = params.dropoffLat ? Number(params.dropoffLat) : NaN;
   const parsedDropoffLng = params.dropoffLng ? Number(params.dropoffLng) : NaN;
@@ -80,21 +92,63 @@ export default function ActiveRideScreen() {
         }
       : null;
 
+  const [rideStatus, setRideStatus] = useState<"accepted" | "ongoing" | "completed">("accepted");
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  useEffect(() => {
+    if (params.rideId && !params.rideId.startsWith("req-")) {
+      apiClient
+        .get<{ status: string }>(`/rides/${params.rideId}`)
+        .then((res) => {
+          if (res.data?.status === "ongoing") {
+            setRideStatus("ongoing");
+          } else if (res.data?.status === "completed") {
+            setRideStatus("completed");
+          }
+        })
+        .catch(() => {});
+    }
+  }, [params.rideId]);
+
   const handleStartRide = async () => {
-    if (isStarting) return;
-    setIsStarting(true);
+    if (isProcessing) return;
+    setIsProcessing(true);
     setErrorMsg(null);
     if (params.rideId && !params.rideId.startsWith("req-")) {
       try {
         await apiClient.patch(`/rides/${params.rideId}/status`, { status: "ongoing" });
         queryClient.invalidateQueries({ queryKey: ["rides"] });
+        setRideStatus("ongoing");
       } catch (err: any) {
-        setIsStarting(false);
+        setIsProcessing(false);
         const msg = err?.response?.data?.message || "Failed to start ride";
         setErrorMsg(typeof msg === "string" ? msg : "Failed to start ride");
         return;
       }
+    } else {
+      setRideStatus("ongoing");
     }
+    setIsProcessing(false);
+  };
+
+  const handleCompleteRide = async () => {
+    if (isProcessing) return;
+    setIsProcessing(true);
+    setErrorMsg(null);
+    if (params.rideId && !params.rideId.startsWith("req-")) {
+      try {
+        await apiClient.patch(`/rides/${params.rideId}/status`, { status: "completed" });
+        queryClient.invalidateQueries({ queryKey: ["rides"] });
+        queryClient.invalidateQueries({ queryKey: ["driver", "ride-history"] });
+        queryClient.invalidateQueries({ queryKey: ["driver", "earnings"] });
+      } catch (err: any) {
+        setIsProcessing(false);
+        const msg = err?.response?.data?.message || "Failed to complete ride";
+        setErrorMsg(typeof msg === "string" ? msg : "Failed to complete ride");
+        return;
+      }
+    }
+    stopActiveRideTracking();
     router.push({
       pathname: "/(driver)/ride-completed",
       params: {
@@ -227,18 +281,33 @@ export default function ActiveRideScreen() {
             {errorMsg ? (
               <Text className="mb-2 text-center font-label-sm text-error">{errorMsg}</Text>
             ) : null}
-            <Pressable
-              onPress={handleStartRide}
-              disabled={isStarting}
-              className="h-14 w-full flex-row items-center justify-center gap-2 rounded-full bg-primary shadow-md active:scale-[0.98]"
-            >
-              <MaterialIcons name="play-arrow" size={22} color={themeColors.onPrimary} />
-              <Text className="font-label-sm text-[14px] uppercase tracking-widest text-on-primary">
-                Start Ride
-              </Text>
-            </Pressable>
+            {rideStatus === "ongoing" ? (
+              <Pressable
+                onPress={handleCompleteRide}
+                disabled={isProcessing}
+                className="h-14 w-full flex-row items-center justify-center gap-2 rounded-full bg-emerald-600 shadow-md active:scale-[0.98]"
+              >
+                <MaterialIcons name="check-circle" size={22} color="#ffffff" />
+                <Text className="font-label-sm text-[14px] uppercase tracking-widest text-white">
+                  {isProcessing ? "Completing..." : "Complete Ride"}
+                </Text>
+              </Pressable>
+            ) : (
+              <Pressable
+                onPress={handleStartRide}
+                disabled={isProcessing}
+                className="h-14 w-full flex-row items-center justify-center gap-2 rounded-full bg-primary shadow-md active:scale-[0.98]"
+              >
+                <MaterialIcons name="play-arrow" size={22} color={themeColors.onPrimary} />
+                <Text className="font-label-sm text-[14px] uppercase tracking-widest text-on-primary">
+                  {isProcessing ? "Starting..." : "Start Ride"}
+                </Text>
+              </Pressable>
+            )}
             <Text className="mt-3 text-center font-body-md text-[13px] text-on-surface-variant">
-              Passenger has been notified of your arrival.
+              {rideStatus === "ongoing"
+                ? "Trip is currently in progress. Tap to complete when dropped off."
+                : "Passenger has been notified of your arrival."}
             </Text>
           </View>
         </View>

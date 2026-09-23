@@ -49,6 +49,7 @@ export interface PassengerRideState {
   createRideError: string | null;
   offers: DriverOffer[];
   selectedOffer: DriverOffer | null;
+  paymentMethod: "cash" | "wallet" | "card";
 
   setCurrentLocation: (point: PassengerLocationPoint | null) => void;
   setPickup: (point: PassengerLocationPoint | null) => void;
@@ -61,6 +62,7 @@ export interface PassengerRideState {
   setProposedFare: (fare: number | null) => void;
   setSelectedRideType: (type: string) => void;
   setRideStatus: (status: PassengerRideStatus) => void;
+  setPaymentMethod: (method: "cash" | "wallet" | "card") => void;
   setCurrentRideId: (rideId: string | null) => void;
   setCreatedRideId: (rideId: string | null) => void;
   setIsCreatingRide: (isCreating: boolean) => void;
@@ -87,6 +89,7 @@ const initialRideState = {
   createRideError: null,
   offers: [],
   selectedOffer: null,
+  paymentMethod: "cash" as "cash" | "wallet" | "card",
 };
 
 export const usePassengerRideStore = create<PassengerRideState>((set) => ({
@@ -104,6 +107,7 @@ export const usePassengerRideStore = create<PassengerRideState>((set) => ({
   setProposedFare: (proposedFare) => set({ proposedFare }),
   setSelectedRideType: (selectedRideType) => set({ selectedRideType }),
   setRideStatus: (rideStatus) => set({ rideStatus }),
+  setPaymentMethod: (paymentMethod) => set({ paymentMethod }),
   setCurrentRideId: (currentRideId) =>
     set({ currentRideId, createdRideId: currentRideId }),
   setCreatedRideId: (createdRideId) =>
@@ -125,6 +129,7 @@ export const usePassengerRideStore = create<PassengerRideState>((set) => ({
       createRideError: null,
       offers: [],
       selectedOffer: null,
+      paymentMethod: "cash",
     }),
   resetRide: () => set(initialRideState),
 }));
