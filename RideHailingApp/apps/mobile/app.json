@@ -21,7 +21,7 @@
       "package": "com.laraib_aq.mobile",
       "config": {
         "googleMaps": {
-          "apiKey": "AIzaSyDummyKeyForGoogleMapsTestingOnly"
+          "apiKey": ""
         }
       },
       "permissions": [

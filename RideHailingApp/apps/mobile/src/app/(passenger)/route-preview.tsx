@@ -32,19 +32,17 @@ export default function PassengerRoutePreviewScreen() {
   const [routeCoords, setRouteCoords] = useState<{ latitude: number; longitude: number }[]>([]);
   const [isFallbackRoute, setIsFallbackRoute] = useState(false);
 
-  // Effective points
-  const effectivePickup = pickup || currentLocation || {
-    latitude: 37.7749,
-    longitude: -122.4194,
-    name: "Current Location",
-  };
-  const effectiveDest = destination || {
-    latitude: 37.788,
-    longitude: -122.408,
-    name: "Destination",
-  };
+  const effectivePickup = pickup || currentLocation;
+  const effectiveDest = destination;
+  const hasRoutePoints = Boolean(effectivePickup && effectiveDest);
+
+  // Nothing to preview without a real pickup and destination -- go back rather than fake them.
+  useEffect(() => {
+    if (!hasRoutePoints) router.back();
+  }, [hasRoutePoints, router]);
 
   useEffect(() => {
+    if (!effectivePickup || !effectiveDest) return;
     let isMounted = true;
     (async () => {
       setIsLoadingRoute(true);
@@ -75,7 +73,9 @@ export default function PassengerRoutePreviewScreen() {
     return () => {
       isMounted = false;
     };
-  }, [effectivePickup.latitude, effectivePickup.longitude, effectiveDest.latitude, effectiveDest.longitude]);
+  }, [effectivePickup?.latitude, effectivePickup?.longitude, effectiveDest?.latitude, effectiveDest?.longitude]);
+
+  if (!effectivePickup || !effectiveDest) return null;
 
   const handleConfirm = () => {
     router.push("/(passenger)/ride-select" as any);
