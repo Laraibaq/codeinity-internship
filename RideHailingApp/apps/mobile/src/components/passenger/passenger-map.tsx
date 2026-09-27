@@ -130,7 +130,7 @@ export const PassengerMap = forwardRef<PassengerMapRef, PassengerMapProps>(
       <View style={[styles.container, style]}>
         <MapView
           ref={mapRef}
-          style={StyleSheet.absoluteFillObject}
+          style={StyleSheet.absoluteFill}
           initialRegion={initialRegion}
           showsUserLocation={showUserLocation}
           showsCompass={false}
@@ -186,6 +186,6 @@ export const PassengerMap = forwardRef<PassengerMapRef, PassengerMapProps>(
 
 const styles = StyleSheet.create({
   container: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
 });

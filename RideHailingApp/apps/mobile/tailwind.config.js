@@ -76,26 +76,26 @@ module.exports = {
         "headline-lg-mobile": ["Inter"],
       },
       fontSize: {
-        "body-md": ["16px", { lineHeight: "24px", fontWeight: "400" }],
+        "body-md": ["15px", { lineHeight: "22px", fontWeight: "400" }],
         "label-sm": [
           "12px",
           { lineHeight: "16px", letterSpacing: "0.05em", fontWeight: "600" },
         ],
         "fare-display": [
-          "24px",
-          { lineHeight: "32px", letterSpacing: "0.02em", fontWeight: "700" },
+          "22px",
+          { lineHeight: "28px", letterSpacing: "0.02em", fontWeight: "700" },
         ],
         "display-lg": [
-          "48px",
-          { lineHeight: "56px", letterSpacing: "-0.02em", fontWeight: "700" },
+          "28px",
+          { lineHeight: "34px", letterSpacing: "-0.02em", fontWeight: "700" },
         ],
         "headline-lg": [
-          "32px",
-          { lineHeight: "40px", letterSpacing: "-0.01em", fontWeight: "600" },
+          "24px",
+          { lineHeight: "30px", letterSpacing: "-0.01em", fontWeight: "600" },
         ],
         "headline-lg-mobile": [
-          "28px",
-          { lineHeight: "36px", letterSpacing: "-0.01em", fontWeight: "600" },
+          "18px",
+          { lineHeight: "24px", letterSpacing: "-0.01em", fontWeight: "600" },
         ],
       },
     },

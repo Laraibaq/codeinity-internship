@@ -229,40 +229,21 @@ export default function PassengerRideSelectScreen() {
 
         {/* Payment + CTA */}
         <View style={styles.actionArea}>
-          {/* Payment selector */}
-          <Pressable
-            style={styles.paymentRow}
-            onPress={() => {
-              const nextMethod =
-                paymentMethod === "cash" ? "wallet" : paymentMethod === "wallet" ? "card" : "cash";
-              setPaymentMethod(nextMethod);
-            }}
-          >
+          {/* Payment indicator (MVP1 Policy: Cash Only PKR) */}
+          <View style={styles.paymentRow}>
             <View style={styles.paymentCardIcon}>
               <MaterialIcons
-                name={
-                  paymentMethod === "cash"
-                    ? "attach-money"
-                    : paymentMethod === "wallet"
-                    ? "account-balance-wallet"
-                    : "credit-card"
-                }
+                name="payments"
                 size={18}
                 color={themeColors.primary}
               />
             </View>
             <View style={styles.paymentTextBlock}>
-              <Text style={styles.paymentName}>
-                {paymentMethod === "cash"
-                  ? "Cash Payment"
-                  : paymentMethod === "wallet"
-                  ? "In-App Wallet"
-                  : "Credit / Debit Card"}
-              </Text>
-              <Text style={styles.paymentSwitch}>Switch</Text>
+              <Text style={styles.paymentName}>Cash Payment (PKR)</Text>
+              <Text style={styles.paymentSwitch}>Pay driver directly</Text>
             </View>
-            <MaterialIcons name="chevron-right" size={24} color={themeColors.onSurfaceVariant} />
-          </Pressable>
+            <MaterialIcons name="check-circle" size={20} color="#059669" />
+          </View>
 
           {/* Confirm button */}
           <Pressable
@@ -284,7 +265,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   mapBg: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     opacity: 0.8,
   },
   // ── Map markers ──

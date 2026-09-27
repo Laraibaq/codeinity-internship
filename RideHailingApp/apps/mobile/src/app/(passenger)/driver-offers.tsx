@@ -566,13 +566,13 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   mapBg: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   mapBlur: {
     opacity: 0.7,
   },
   dimOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: "rgba(249,249,255,0.3)",
   },
   // ── Radar ──

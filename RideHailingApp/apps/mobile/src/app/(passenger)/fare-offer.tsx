@@ -185,7 +185,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   mapBg: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   // ── Map markers ──
   pickupMarker: {

@@ -315,7 +315,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   mapBg: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   // ── Markers ──
   destinationMarker: {

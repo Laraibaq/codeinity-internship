@@ -174,7 +174,7 @@ export default function RideDetailsScreen() {
             pickup={pickupPoint}
             dropoff={dropoffPoint}
             showsRoutePolyline={true}
-            style={StyleSheet.absoluteFillObject}
+            style={StyleSheet.absoluteFill}
           />
           <LinearGradient
             colors={["transparent", themeColors.surface]}
@@ -230,8 +230,11 @@ export default function RideDetailsScreen() {
                   <Text className="font-label-sm text-label-sm text-secondary">{passengerRating}</Text>
                 </View>
               </View>
-              {/* TODO: no in-app messaging screen exists yet. */}
-              <Pressable className="items-center justify-center rounded-full bg-surface-container p-2 active:scale-95">
+              <Pressable
+                onPress={() => router.push({ pathname: "/(driver)/chat", params: { name: passengerName } })}
+                accessibilityLabel="Message passenger"
+                className="items-center justify-center rounded-full bg-surface-container p-2 active:scale-95"
+              >
                 <MaterialIcons name="mail" size={20} color={themeColors.primary} />
               </Pressable>
             </View>

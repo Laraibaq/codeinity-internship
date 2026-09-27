@@ -88,7 +88,7 @@ export default function DriverDrawerLayout() {
     <Drawer
       initialRouteName="(tabs)"
       screenOptions={{ headerShown: false }}
-      drawerContent={(props) => <DriverDrawerContent {...props} />}
+      drawerContent={(props) => <DriverDrawerContent {...(props as any)} />}
     >
       <Drawer.Screen name="(tabs)" />
       <Drawer.Screen name="history" />

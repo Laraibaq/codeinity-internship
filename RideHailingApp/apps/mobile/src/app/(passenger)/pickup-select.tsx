@@ -283,7 +283,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   mapBg: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   // ── Floating Header ──
   floatingHeader: {

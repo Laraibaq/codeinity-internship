@@ -203,7 +203,7 @@ export default function ActiveRideScreen() {
             driverLocation={driverLocation}
             dropoff={dropoffPoint}
             showsRoutePolyline={true}
-            style={StyleSheet.absoluteFillObject}
+            style={StyleSheet.absoluteFill}
           />
 
           <LinearGradient

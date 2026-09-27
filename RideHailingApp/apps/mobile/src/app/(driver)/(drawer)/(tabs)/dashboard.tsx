@@ -17,6 +17,8 @@ import { socketClient } from "@/lib/realtime/socket-client";
 import { NativeMap } from "@/components/native-map";
 import { useLocationStore } from "@/store/location-store";
 
+import { useDriverEarnings } from "@/hooks/use-ride-history";
+
 type DriverStatus = "online" | "offline";
 type OnlineView = "searching" | "no-requests";
 
@@ -131,7 +133,7 @@ export default function DriverDashboardScreen() {
   const [dismissedRequestIds, setDismissedRequestIds] = useState<Set<string>>(new Set());
   const [acceptError, setAcceptError] = useState<string | null>(null);
   const requestTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
-
+  const { data: earningsData } = useDriverEarnings();
 
   const {
     latitude: driverLat,
@@ -328,15 +330,24 @@ export default function DriverDashboardScreen() {
           <NativeMap
             driverLocation={driverLocation}
             showsRoutePolyline={false}
-            style={StyleSheet.absoluteFillObject}
+            style={StyleSheet.absoluteFill}
           />
           <View style={{ paddingTop: 20 + insets.top }} className="px-container-margin z-10">
             <View className="flex-row items-center justify-between rounded-full border border-outline-variant/20 bg-surface p-2 shadow-lg">
-              <View className="flex-row items-center gap-3 px-4">
-                <View className="h-3 w-3 rounded-full bg-green-500" />
-                <Text className="font-label-sm text-label-sm tracking-wider text-green-700">
-                  ONLINE
-                </Text>
+              <View className="flex-row items-center gap-2">
+                <Pressable
+                  onPress={() => navigation.dispatch(DrawerActions.openDrawer())}
+                  accessibilityLabel="Open menu"
+                  className="items-center justify-center rounded-full p-2 active:scale-95"
+                >
+                  <MaterialIcons name="menu" size={20} color={themeColors.primary} />
+                </Pressable>
+                <View className="flex-row items-center gap-2 pr-2">
+                  <View className="h-3 w-3 rounded-full bg-green-500" />
+                  <Text className="font-label-sm text-label-sm tracking-wider text-green-700">
+                    ONLINE
+                  </Text>
+                </View>
               </View>
               <Pressable
                 onPress={handleGoOffline}
@@ -455,12 +466,13 @@ export default function DriverDashboardScreen() {
     <View className="flex-1 bg-background">
       <View style={{ paddingTop: insets.top }} className="w-full bg-surface shadow-sm">
         <View className="h-16 w-full flex-row items-center justify-between px-container-margin py-base">
-          {/* TODO: unwired -- see header-mismatch note above. This is a tab root, not a pushed
-              screen, so there's no sensible `router.back()` destination for this back arrow. */}
-          <Pressable className="items-center justify-center rounded-full p-2 active:scale-95">
-            <MaterialIcons name="arrow-back" size={24} color={themeColors.primary} />
+          <Pressable
+            onPress={() => navigation.dispatch(DrawerActions.openDrawer())}
+            accessibilityLabel="Open navigation menu"
+            className="items-center justify-center rounded-full p-2 active:scale-95"
+          >
+            <MaterialIcons name="menu" size={24} color={themeColors.primary} />
           </Pressable>
-          {/* Fixed: see header note above. */}
           <Text className="font-headline-lg-mobile text-headline-lg-mobile font-bold text-primary">
             Driver Portal
           </Text>
@@ -473,7 +485,7 @@ export default function DriverDashboardScreen() {
           <NativeMap
             driverLocation={driverLocation}
             showsRoutePolyline={false}
-            style={StyleSheet.absoluteFillObject}
+            style={StyleSheet.absoluteFill}
           />
           <BlurView
             intensity={20}
@@ -497,7 +509,7 @@ export default function DriverDashboardScreen() {
                   Today&apos;s Earnings
                 </Text>
                 <Text className="font-display-lg text-display-lg text-on-surface">
-                  {formatCurrency(0)}
+                  {formatCurrency(earningsData?.today ?? 0)}
                 </Text>
               </View>
             </View>

@@ -37,7 +37,7 @@ export default function DriverWelcomeScreen() {
   return (
     <View className="flex-1 bg-background">
       <View className="flex-1">
-        <View className="relative h-[486px] w-full">
+        <View className="relative h-[320px] w-full">
           <Image
             className="absolute inset-0 h-full w-full rounded-b-[32px]"
             resizeMode="cover"

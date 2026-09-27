@@ -114,7 +114,7 @@ export function NativeMap({
   return (
     <View style={[styles.container, style]}>
       <MapView
-        style={StyleSheet.absoluteFillObject}
+        style={StyleSheet.absoluteFill}
         initialRegion={calculatedRegion}
         showsUserLocation={showUserLocation}
         showsCompass={false}
@@ -165,7 +165,7 @@ export function NativeMap({
 
 const styles = StyleSheet.create({
   container: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     overflow: "hidden",
   },
 });

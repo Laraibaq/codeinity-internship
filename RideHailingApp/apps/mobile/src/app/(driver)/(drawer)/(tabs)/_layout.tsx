@@ -58,7 +58,7 @@ export default function DriverTabsLayout() {
           shadowRadius: 12,
           elevation: 8,
         },
-        tabBarButton: (props) => <TabBarButton {...props} />,
+        tabBarButton: (props) => <TabBarButton {...(props as any)} />,
       }}
     >
       <Tabs.Screen

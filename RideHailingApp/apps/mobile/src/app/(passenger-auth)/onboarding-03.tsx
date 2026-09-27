@@ -17,6 +17,7 @@ import Animated, {
   FadeInDown,
 } from "react-native-reanimated";
 import { useRouter } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialIcons } from "@expo/vector-icons";
 import { themeColors } from "@/constants/theme-colors";
 
@@ -25,6 +26,7 @@ const ILLUSTRATION_URI =
 
 export default function PassengerOnboarding03Screen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
   // Float animation
   const floatY = useSharedValue(0);
@@ -48,21 +50,37 @@ export default function PassengerOnboarding03Screen() {
       <StatusBar barStyle="dark-content" backgroundColor={themeColors.surfaceContainerLow} />
 
       {/* Header */}
-      <View style={styles.header}>
+      <View
+        style={[
+          styles.header,
+          {
+            paddingTop: Math.max(insets.top + 8, 20),
+            height: Math.max(insets.top + 56, 64),
+          },
+        ]}
+      >
         <Pressable
           onPress={() => router.back()}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
           style={({ pressed }) => [styles.backBtn, pressed && styles.backBtnPressed]}
+          accessibilityRole="button"
           accessibilityLabel="Back"
         >
           <MaterialIcons name="arrow-back" size={24} color={themeColors.onSurface} />
         </Pressable>
-        <Pressable onPress={() => router.push("/(passenger-auth)/login")}>
+        <Pressable
+          onPress={() => router.push("/(passenger-auth)/login")}
+          hitSlop={{ top: 12, bottom: 12, left: 16, right: 16 }}
+          style={({ pressed }) => pressed && styles.pressed}
+          accessibilityRole="button"
+          accessibilityLabel="Skip"
+        >
           <Text style={styles.skip}>SKIP</Text>
         </Pressable>
       </View>
 
-      {/* Visual Area (upper ~55%) */}
-      <View style={styles.visualArea}>
+      {/* Visual Area (upper ~50%) */}
+      <View style={[styles.visualArea, { paddingTop: Math.max(insets.top + 56, 64) }]}>
         {/* Floating card with illustration */}
         <Animated.View style={[styles.floatWrapper, floatStyle]}>
           <View style={styles.imageCard}>
@@ -79,8 +97,13 @@ export default function PassengerOnboarding03Screen() {
         </Animated.View>
       </View>
 
-      {/* Content Area (lower ~45%) */}
-      <View style={styles.contentArea}>
+      {/* Content Area (lower ~50%) */}
+      <View
+        style={[
+          styles.contentArea,
+          { paddingBottom: Math.max(insets.bottom + 16, 32) },
+        ]}
+      >
         {/* Text */}
         <Animated.View entering={FadeInDown.delay(100).duration(600)} style={styles.textBlock}>
           <Text style={styles.headline}>Reliable Rides, Fast</Text>
@@ -108,6 +131,9 @@ export default function PassengerOnboarding03Screen() {
           <Pressable
             onPress={() => router.push("/(passenger-auth)/login")}
             style={({ pressed }) => [styles.btnGetStarted, pressed && styles.pressed]}
+            accessibilityRole="button"
+            accessibilityLabel="Get Started"
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
             <Text style={styles.btnText}>GET STARTED</Text>
             <MaterialIcons name="arrow-forward" size={18} color={themeColors.onPrimary} />
@@ -122,20 +148,17 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: themeColors.surface,
-    overflow: "hidden",
   },
   header: {
     position: "absolute",
     top: 0,
     left: 0,
     right: 0,
-    zIndex: 10,
+    zIndex: 20,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 16,
   },
   backBtn: {
     width: 40,
