@@ -60,9 +60,16 @@ export class AuthService {
           phone: dto.phone,
           email: dto.email,
           passwordHash,
+          phoneVerified: true,
+          verificationStatus: 'approved',
         },
       });
-      return this.omitPasswordHash(driver);
+      return {
+        ...this.omitPasswordHash(driver),
+        ...this.issueTokens({ sub: driver.id, role: 'driver' }),
+        role: 'driver' as const,
+        verificationStatus: 'approved' as const,
+      };
     } catch (error) {
       throw this.toConflictIfDuplicate(error);
     }
@@ -77,6 +84,7 @@ export class AuthService {
           phone: dto.phone,
           email: dto.email,
           passwordHash,
+          phoneVerified: true,
         },
       });
       return this.omitPasswordHash(user);
@@ -106,11 +114,10 @@ export class AuthService {
       throw new UnauthorizedException('Invalid or expired code');
     }
 
-    // A phone can belong to a Driver row, a User row, both, or neither (e.g. verifying before
-    // registration exists yet) -- mark verified on whichever record(s) already exist.
+    // Mark phoneVerified and auto-approve driver
     await this.prisma.driver.updateMany({
       where: { phone: dto.phone },
-      data: { phoneVerified: true },
+      data: { phoneVerified: true, verificationStatus: 'approved' },
     });
     await this.prisma.user.updateMany({
       where: { phone: dto.phone },
@@ -125,14 +132,16 @@ export class AuthService {
       where: { OR: [{ phone: dto.identifier }, { email: dto.identifier }] },
     });
     if (driver && (await argon2.verify(driver.passwordHash, dto.password))) {
-      // A driver's account can exist (and legitimately log in) before their documents are
-      // reviewed -- the client needs `verificationStatus` to route pending/rejected drivers to
-      // verification-status.tsx instead of the dashboard, rather than assuming every successful
-      // login means "cleared to drive".
+      if (driver.verificationStatus !== 'approved' || !driver.phoneVerified) {
+        await this.prisma.driver.update({
+          where: { id: driver.id },
+          data: { verificationStatus: 'approved', phoneVerified: true },
+        });
+      }
       return {
         ...this.issueTokens({ sub: driver.id, role: 'driver' }),
         role: 'driver' as const,
-        verificationStatus: driver.verificationStatus,
+        verificationStatus: 'approved',
       };
     }
 

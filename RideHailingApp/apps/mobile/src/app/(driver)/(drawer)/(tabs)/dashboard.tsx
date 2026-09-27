@@ -3,7 +3,6 @@ import { LayoutAnimation, Pressable, ScrollView, StyleSheet, Text, View } from "
 import { MaterialIcons } from "@expo/vector-icons";
 import { useFocusEffect, useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import { BlurView } from "expo-blur";
-import { DrawerActions } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -279,7 +278,7 @@ export default function DriverDashboardScreen() {
   useFocusEffect(
     useCallback(() => {
       if (consumeDrawerOpenRequest()) {
-        navigation.dispatch(DrawerActions.openDrawer());
+        navigation.dispatch({ type: "OPEN_DRAWER" });
       }
     }, [navigation]),
   );
@@ -336,7 +335,7 @@ export default function DriverDashboardScreen() {
             <View className="flex-row items-center justify-between rounded-full border border-outline-variant/20 bg-surface p-2 shadow-lg">
               <View className="flex-row items-center gap-2">
                 <Pressable
-                  onPress={() => navigation.dispatch(DrawerActions.openDrawer())}
+                  onPress={() => navigation.dispatch({ type: "OPEN_DRAWER" })}
                   accessibilityLabel="Open menu"
                   className="items-center justify-center rounded-full p-2 active:scale-95"
                 >
@@ -467,7 +466,7 @@ export default function DriverDashboardScreen() {
       <View style={{ paddingTop: insets.top }} className="w-full bg-surface shadow-sm">
         <View className="h-16 w-full flex-row items-center justify-between px-container-margin py-base">
           <Pressable
-            onPress={() => navigation.dispatch(DrawerActions.openDrawer())}
+            onPress={() => navigation.dispatch({ type: "OPEN_DRAWER" })}
             accessibilityLabel="Open navigation menu"
             className="items-center justify-center rounded-full p-2 active:scale-95"
           >

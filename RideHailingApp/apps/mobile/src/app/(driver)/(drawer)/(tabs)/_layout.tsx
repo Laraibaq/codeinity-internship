@@ -1,5 +1,5 @@
 import { MaterialIcons } from "@expo/vector-icons";
-import type { BottomTabBarButtonProps } from "@react-navigation/bottom-tabs";
+import type { BottomTabBarButtonProps } from "expo-router/tabs";
 import { Tabs } from "expo-router";
 import { Pressable } from "react-native";
 

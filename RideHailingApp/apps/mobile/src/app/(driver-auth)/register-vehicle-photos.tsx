@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { themeColors } from "@/constants/theme-colors";
 import { registrationDraft, type DraftVehicleType } from "@/utils/registration-draft";
 import { useDocumentUpload, type DocumentType } from "@/hooks/use-document-upload";
+import { useAuthStore } from "@/store/auth-store";
 
 // Recreated screen: an earlier "Vehicle Photo Upload" screen existed at this same path, but was
 // deleted along with two other files from an alternate registration flow that was abandoned in favor
@@ -252,10 +253,17 @@ export default function DriverRegisterVehiclePhotosScreen() {
         </View>
 
         <Pressable
-          onPress={() => router.push("/(driver)/verification-status")}
+          onPress={() => {
+            const isAuthed = useAuthStore.getState().isAuthenticated;
+            if (isAuthed) {
+              router.replace("/(driver)/(drawer)/(tabs)/dashboard");
+            } else {
+              router.replace("/(driver-auth)/login");
+            }
+          }}
           className="h-14 w-full flex-row items-center justify-center gap-2 rounded-xl bg-primary shadow-md active:scale-95"
         >
-          <Text className="font-label-sm text-label-sm text-on-primary">Submit Photos</Text>
+          <Text className="font-label-sm text-label-sm text-on-primary">Complete & Go to Dashboard</Text>
           <MaterialIcons name="arrow-forward" size={18} color={themeColors.onPrimary} />
         </Pressable>
       </ScrollView>
