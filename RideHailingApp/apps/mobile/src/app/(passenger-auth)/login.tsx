@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { ActivityIndicator } from "react-native";
 import { useRouter } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialIcons } from "@expo/vector-icons";
 import { themeColors } from "@/constants/theme-colors";
 import { passengerAuthApi } from "@/lib/api/passenger/auth";
@@ -25,6 +26,7 @@ const ON_ERROR_CONTAINER = "#93000a";
 
 export default function PassengerLoginScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -91,10 +93,21 @@ export default function PassengerLoginScreen() {
       <View style={styles.radialBg} />
 
       {/* Top header */}
-      <View style={styles.topBar}>
+      <View
+        style={[
+          styles.topBar,
+          {
+            paddingTop: Math.max(insets.top + 8, 20),
+            height: Math.max(insets.top + 56, 64),
+          },
+        ]}
+      >
         <Pressable
           onPress={() => router.back()}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
           style={({ pressed }) => [styles.backBtn, pressed && styles.pressed]}
+          accessibilityRole="button"
+          accessibilityLabel="Back"
         >
           <MaterialIcons name="arrow-back" size={24} color={themeColors.onSurfaceVariant} />
         </Pressable>
@@ -103,7 +116,10 @@ export default function PassengerLoginScreen() {
       </View>
 
       <ScrollView
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: Math.max(insets.bottom + 24, 40) },
+        ]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >

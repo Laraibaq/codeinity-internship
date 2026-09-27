@@ -8,6 +8,7 @@ import {
   StyleSheet,
 } from "react-native";
 import { useRouter } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { MaterialIcons } from "@expo/vector-icons";
 import { themeColors } from "@/constants/theme-colors";
@@ -17,6 +18,7 @@ const HERO_IMAGE_URI =
 
 export default function PassengerWelcomeScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
   return (
     <View style={styles.root}>
@@ -30,14 +32,22 @@ export default function PassengerWelcomeScreen() {
       >
         <LinearGradient
           colors={["transparent", "#f9f9ff"]}
-          style={StyleSheet.absoluteFillObject}
+          style={StyleSheet.absoluteFill}
         />
       </ImageBackground>
 
       {/* Content Canvas */}
-      <View style={styles.content}>
+      <View
+        style={[
+          styles.content,
+          {
+            paddingTop: Math.max(insets.top + 16, 48),
+            paddingBottom: Math.max(insets.bottom + 16, 32),
+          },
+        ]}
+      >
         {/* Brand / Logo */}
-        <View style={styles.logoContainer}>
+        <View style={[styles.logoContainer, { top: Math.max(insets.top + 8, 48) }]}>
           <Text style={styles.brandName}>Ryde</Text>
         </View>
 
@@ -57,6 +67,9 @@ export default function PassengerWelcomeScreen() {
             <Pressable
               onPress={() => router.push("/(passenger-auth)/onboarding-01" as any)}
               style={({ pressed }) => [styles.btnPrimary, pressed && styles.pressed]}
+              accessibilityRole="button"
+              accessibilityLabel="Get Started"
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
               <Text style={styles.btnPrimaryText}>Get Started</Text>
               <MaterialIcons name="arrow-forward" size={18} color={themeColors.onPrimary} />
@@ -65,6 +78,9 @@ export default function PassengerWelcomeScreen() {
             <Pressable
               onPress={() => router.push("/(passenger-auth)/login")}
               style={({ pressed }) => [styles.btnSecondary, pressed && styles.pressed]}
+              accessibilityRole="button"
+              accessibilityLabel="Log In"
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
               <Text style={styles.btnSecondaryText}>Log In</Text>
             </Pressable>
@@ -84,7 +100,6 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: "#f9f9ff",
-    overflow: "hidden",
   },
   heroImage: {
     position: "absolute",
@@ -96,13 +111,12 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     paddingHorizontal: 20,
-    paddingBottom: 40,
     justifyContent: "flex-end",
   },
   logoContainer: {
     position: "absolute",
-    top: 56,
     left: 20,
+    zIndex: 10,
   },
   brandName: {
     fontSize: 28,
