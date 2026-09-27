@@ -27,6 +27,50 @@ export class RidesService {
     private readonly notificationsService: NotificationsService,
   ) {}
 
+  // Guards every legacy accept path (acceptOffer, driverAcceptOffer, and
+  // updateRideStatus's driver-direct-accept branch) against the accept-bypass
+  // bug found in the Phase 0 audit: a driver could tap a plain "Accept" and
+  // get finalFare set from RideOffer.offerAmount / Ride.proposedFare, even
+  // while a real fare negotiation (Negotiation/NegotiationOffer) had already
+  // moved the agreed amount somewhere else for that same ride+driver pair.
+  //
+  // Approach chosen: reject-if-active-negotiation-exists, not "reroute
+  // through the negotiation-accept endpoint." Rerouting isn't a clean
+  // option here -- these legacy paths key off RideOffer ids, which don't
+  // correspond to NegotiationOffer ids, so grafting them onto
+  // NegotiationService.acceptNegotiation would mean inventing an id mapping
+  // between two independent tables. A guard is the minimal, additive fix:
+  // it changes nothing about any accept that has no competing negotiation,
+  // and for the case that matters, it fails loudly (ConflictException)
+  // instead of silently applying a stale fare. Phase 3 is responsible for
+  // pointing the frontend's Accept buttons at the real negotiation-accept
+  // endpoint when one applies; this phase only makes sure the backend can't
+  // be fooled regardless of what the UI does in the meantime.
+  //
+  // Existence of an `active` Negotiation row for (rideId, driverId) is
+  // treated as sufficient reason to reject, rather than trying to compare
+  // its currentAmount against the legacy path's candidate finalFare -- a
+  // Negotiation row is only ever created once a driver has actually
+  // countered (see NegotiationService.driverCounter), so its mere existence
+  // already means "the amount on offer differs from the original ask,"
+  // which is exactly the condition the legacy path can't see.
+  private async assertNoActiveNegotiation(
+    tx: any,
+    rideId: string,
+    driverId: string,
+  ): Promise<void> {
+    const activeNegotiation = await tx.negotiation.findUnique({
+      where: { rideId_driverId: { rideId, driverId } },
+    });
+    if (activeNegotiation && activeNegotiation.status === 'active') {
+      throw new ConflictException(
+        'An active fare negotiation exists for this ride and driver. Use ' +
+          'POST /rides/:id/negotiation/accept/:offerId to accept at the ' +
+          'negotiated fare instead of this endpoint.',
+      );
+    }
+  }
+
   async createRide(passengerId: string, dto: CreateRideDto) {
     const passenger = await this.prisma.user.findUnique({
       where: { id: passengerId },
@@ -436,6 +480,10 @@ export class RidesService {
         throw new ConflictException('Driver is currently occupied with another ride');
       }
 
+      // 3b. Reject if a real fare negotiation is in progress for this ride+driver
+      // (see assertNoActiveNegotiation's comment for why this exists).
+      await this.assertNoActiveNegotiation(tx, rideId, offer.driverId);
+
       // 4. Update accepted offer
       const acceptedOffer = await tx.rideOffer.update({
         where: { id: offerId },
@@ -621,6 +669,10 @@ export class RidesService {
       if (occupiedRide) {
         throw new ConflictException('Driver is currently occupied with another ride');
       }
+
+      // Reject if a real fare negotiation is in progress for this ride+driver
+      // (see assertNoActiveNegotiation's comment for why this exists).
+      await this.assertNoActiveNegotiation(tx, rideId, driverId);
 
       const acceptedOffer = await tx.rideOffer.update({
         where: { id: offerId },
@@ -820,6 +872,10 @@ export class RidesService {
         }
 
         const result = await this.prisma.$transaction(async (tx) => {
+          // Reject if a real fare negotiation is in progress for this ride+driver
+          // (see assertNoActiveNegotiation's comment for why this exists).
+          await this.assertNoActiveNegotiation(tx, rideId, user.sub);
+
           const updateResult = await tx.ride.updateMany({
             where: {
               id: rideId,

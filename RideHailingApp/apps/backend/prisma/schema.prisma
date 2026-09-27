@@ -34,9 +34,31 @@ enum RideStatus {
   requested
   offered
   accepted
+  en_route
+  arrived
   ongoing
   completed
   cancelled
+}
+
+// Ride.vehicleType vs Ride.fareTier -- these are deliberately two separate concepts. Do not
+// collapse them back into one enum; a future session without this context is likely to try.
+//
+// - VehicleType (car/bike/rickshaw) describes what a driver PHYSICALLY DRIVES. It already exists
+//   on Vehicle (a driver's own registered vehicle) and is reused as-is on Ride.vehicleType so a
+//   ride can record/filter on driver-matching eligibility (e.g. "only match rickshaw drivers").
+// - RideFareTier (standard/premium/xl/bike) describes a PRICING/COMFORT TIER the passenger picked
+//   in the app -- it has no necessary relationship to the vehicle's body type. A "premium" tier
+//   could in principle be fulfilled by any body type; this app's matching rules (still to be
+//   built) decide how tightly the two are coupled, not the schema.
+// Before this change, the frontend's standard/premium/xl/bike vocabulary had nowhere to persist on
+// Ride at all, and the only enum available (VehicleType: car/bike/rickshaw) covered a different
+// concept entirely -- see the Phase 0 audit's "vehicle type enum mismatch" finding.
+enum RideFareTier {
+  standard
+  premium
+  xl
+  bike
 }
 
 enum OfferType {
@@ -170,6 +192,13 @@ model Ride {
   proposedFare      Decimal    @db.Decimal(10, 2)
   aiRecommendedFare Decimal    @db.Decimal(10, 2)
   finalFare         Decimal?   @db.Decimal(10, 2)
+  // Body type for driver-matching eligibility; see the enum comment above for why this is
+  // separate from fareTier. Nullable: existing rows have neither, and ride-creation isn't wired
+  // to send either yet (that's Phase 3 frontend work) -- this phase only adds the columns.
+  vehicleType       VehicleType?
+  // Pricing/comfort tier the passenger picked (standard/premium/xl/bike); see the enum comment
+  // above. Nullable for the same reason as vehicleType.
+  fareTier          RideFareTier?
   status            RideStatus @default(requested)
   requestedAt       DateTime   @default(now())
   startedAt         DateTime?

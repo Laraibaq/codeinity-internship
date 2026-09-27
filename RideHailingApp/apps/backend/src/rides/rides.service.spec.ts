@@ -62,6 +62,12 @@ describe('RidesService & RidesController (Phase 10 Comprehensive)', () => {
         update: jest.fn(),
         updateMany: jest.fn(),
       },
+      // Backs assertNoActiveNegotiation's guard (added alongside the new negotiation-accept-bypass
+      // fix). Defaults to "no active negotiation" so every existing accept-path test keeps its
+      // prior behavior unless a test explicitly mocks an active one.
+      negotiation: {
+        findUnique: jest.fn().mockResolvedValue(null),
+      },
       notification: {
         create: jest.fn(),
       },
@@ -374,6 +380,84 @@ describe('RidesService & RidesController (Phase 10 Comprehensive)', () => {
       await expect(
         ridesService.acceptOffer(mockRideId, mockOfferId, mockOtherPassengerId),
       ).rejects.toThrow(ForbiddenException);
+    });
+  });
+
+  describe('8b. Accept paths reject when an active negotiation exists (accept-bypass fix)', () => {
+    beforeEach(() => {
+      prisma.negotiation.findUnique.mockResolvedValue({
+        id: 'negotiation-id',
+        rideId: mockRideId,
+        driverId: mockDriverId,
+        status: 'active',
+        currentAmount: 30.0,
+      });
+    });
+
+    it('acceptOffer throws ConflictException instead of applying the stale offerAmount/proposedFare', async () => {
+      prisma.ride.findUnique.mockResolvedValue({
+        id: mockRideId,
+        passengerId: mockPassengerId,
+        status: 'offered',
+        proposedFare: 20.0,
+        driverId: null,
+      });
+      prisma.rideOffer.findUnique.mockResolvedValue({
+        id: mockOfferId,
+        rideId: mockRideId,
+        driverId: mockDriverId,
+        offerAmount: 24.0,
+        status: 'pending',
+        expiresAt: new Date(Date.now() + 60000),
+      });
+
+      await expect(
+        ridesService.acceptOffer(mockRideId, mockOfferId, mockPassengerId),
+      ).rejects.toThrow(ConflictException);
+      expect(prisma.ride.update).not.toHaveBeenCalled();
+    });
+
+    it('driverAcceptOffer throws ConflictException instead of applying the stale offerAmount/proposedFare', async () => {
+      prisma.rideOffer.findUnique.mockResolvedValue({
+        id: mockOfferId,
+        rideId: mockRideId,
+        driverId: mockDriverId,
+        offerAmount: 24.0,
+        status: 'pending',
+        expiresAt: new Date(Date.now() + 60000),
+      });
+      prisma.ride.findUnique.mockResolvedValue({
+        id: mockRideId,
+        status: 'offered',
+        proposedFare: 20.0,
+        driverId: null,
+      });
+
+      await expect(
+        ridesService.driverAcceptOffer(mockDriverId, mockRideId, mockOfferId),
+      ).rejects.toThrow(ConflictException);
+      expect(prisma.ride.update).not.toHaveBeenCalled();
+    });
+
+    it('updateRideStatus driver direct-accept throws ConflictException instead of applying proposedFare', async () => {
+      prisma.ride.findUnique.mockResolvedValue({
+        id: mockRideId,
+        status: 'requested',
+        proposedFare: 20.0,
+        driverId: null,
+      });
+      prisma.driver.findUnique.mockResolvedValue({ id: mockDriverId, verificationStatus: 'approved' });
+
+      await expect(
+        ridesService.updateRideStatus(
+          mockRideId,
+          { sub: mockDriverId, role: 'driver' } as any,
+          { status: UpdateRideStatusEnum.accepted },
+        ),
+      ).rejects.toThrow(ConflictException);
+      expect(prisma.ride.updateMany).not.toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ status: 'accepted' }) }),
+      );
     });
   });
 
