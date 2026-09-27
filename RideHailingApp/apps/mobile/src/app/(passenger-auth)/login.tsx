@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -14,6 +14,7 @@ import { ActivityIndicator } from "react-native";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialIcons } from "@expo/vector-icons";
+import * as SecureStore from "expo-secure-store";
 import { themeColors } from "@/constants/theme-colors";
 import { passengerAuthApi } from "@/lib/api/passenger/auth";
 import { useAuthStore } from "@/store/auth-store";
@@ -23,6 +24,14 @@ import { getApiErrorMessage, getApiErrorStatus } from "@/lib/api-client";
 const ERROR_COLOR = "#ba1a1a";
 const ERROR_CONTAINER = "#ffdad6";
 const ON_ERROR_CONTAINER = "#93000a";
+
+// "Remember me" only remembers the identifier field (phone/email) for next launch -- it does not
+// change token lifetime or storage. The app already keeps you signed in across restarts via the
+// refresh token api-client.ts stores in SecureStore regardless of this toggle; what this actually
+// saves the user is retyping their phone number on a device they trust, on their next *deliberate*
+// login (e.g. after a manual sign-out). Stored in SecureStore, same as the auth tokens, rather than
+// a less-protected store, since a phone number is still identifying information.
+const REMEMBERED_IDENTIFIER_KEY = "passengerRememberedIdentifier";
 
 export default function PassengerLoginScreen() {
   const router = useRouter();
@@ -35,6 +44,17 @@ export default function PassengerLoginScreen() {
   const [hasError, setHasError] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [rememberMe, setRememberMe] = useState(true);
+
+  useEffect(() => {
+    SecureStore.getItemAsync(REMEMBERED_IDENTIFIER_KEY)
+      .then((saved) => {
+        if (saved) setPhone(saved);
+      })
+      .catch(() => {
+        // No stored value, or SecureStore unavailable on this device -- just start with an empty field.
+      });
+  }, []);
 
   const handleLogin = async () => {
     setHasError(false);
@@ -63,6 +83,12 @@ export default function PassengerLoginScreen() {
         setHasError(true);
         setErrorMessage("This account is registered as a driver. Please use the driver login.");
         return;
+      }
+
+      if (rememberMe) {
+        await SecureStore.setItemAsync(REMEMBERED_IDENTIFIER_KEY, raw).catch(() => undefined);
+      } else {
+        await SecureStore.deleteItemAsync(REMEMBERED_IDENTIFIER_KEY).catch(() => undefined);
       }
 
       await useAuthStore.getState().login(data);
@@ -217,6 +243,22 @@ export default function PassengerLoginScreen() {
           </View>
         </View>
 
+        {/* Remember Me */}
+        <Pressable
+          onPress={() => setRememberMe((v) => !v)}
+          style={styles.rememberRow}
+          accessibilityRole="checkbox"
+          accessibilityState={{ checked: rememberMe }}
+          accessibilityLabel="Remember me"
+        >
+          <MaterialIcons
+            name={rememberMe ? "check-box" : "check-box-outline-blank"}
+            size={20}
+            color={rememberMe ? themeColors.primary : themeColors.outline}
+          />
+          <Text style={styles.rememberText}>Remember me</Text>
+        </Pressable>
+
         {/* Continue Button */}
         <Pressable
           onPress={handleLogin}
@@ -359,6 +401,17 @@ const styles = StyleSheet.create({
     letterSpacing: 0.6,
     color: themeColors.primary,
     lineHeight: 16,
+  },
+  rememberRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 4,
+    alignSelf: "flex-start",
+  },
+  rememberText: {
+    fontSize: 14,
+    color: themeColors.onSurfaceVariant,
   },
   inputRow: {
     flexDirection: "row",

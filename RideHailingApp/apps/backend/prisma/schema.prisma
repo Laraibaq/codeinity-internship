@@ -491,3 +491,26 @@ model AuditLog {
   @@map("audit_logs")
 }
 
+// Persisted replacement for OtpService's old in-memory Map -- codes now survive a server restart
+// and are shared across instances, and a code is no longer trivially "valid" (the old
+// implementation accepted any 6-digit string). `purpose` namespaces the code the same way the old
+// Map key did (e.g. "signup" vs "password-reset"), so a code issued for one flow can't verify the
+// other for the same identifier. `codeHash` stores a SHA-256 hash, not the plaintext code, so a
+// database read alone doesn't disclose live codes. `attempts` counts failed verify() calls against
+// this row; OtpService deletes the row once attempts reach its own max-attempts limit, forcing a
+// resend rather than allowing unlimited guesses against one issued code.
+model OtpCode {
+  id         String   @id @default(uuid()) @db.Uuid
+  purpose    String
+  identifier String
+  codeHash   String
+  attempts   Int      @default(0)
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+
+  // One live code per purpose+identifier -- requesting a new one (e.g. "Resend") replaces
+  // whatever was pending, same as the old Map's Map.set() overwrite behavior.
+  @@unique([purpose, identifier])
+  @@map("otp_codes")
+}
+

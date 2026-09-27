@@ -54,21 +54,24 @@ export class AuthService {
   async registerDriver(dto: RegisterDriverDto) {
     const passwordHash = await argon2.hash(dto.password);
     try {
+      // phoneVerified/verificationStatus start false/pending and are set for real by verifyOtp
+      // below once the signup OTP is actually checked -- registration used to set both true
+      // immediately, which made the OTP step that ran after it purely cosmetic (see otp.service.ts
+      // and verifyOtp's own comment).
       const driver = await this.prisma.driver.create({
         data: {
           name: dto.name,
           phone: dto.phone,
           email: dto.email,
           passwordHash,
-          phoneVerified: true,
-          verificationStatus: 'approved',
+          phoneVerified: false,
         },
       });
       return {
         ...this.omitPasswordHash(driver),
         ...this.issueTokens({ sub: driver.id, role: 'driver' }),
         role: 'driver' as const,
-        verificationStatus: 'approved' as const,
+        verificationStatus: driver.verificationStatus,
       };
     } catch (error) {
       throw this.toConflictIfDuplicate(error);
@@ -78,13 +81,15 @@ export class AuthService {
   async registerPassenger(dto: RegisterPassengerDto) {
     const passwordHash = await argon2.hash(dto.password);
     try {
+      // phoneVerified starts false and is set for real by verifyOtp once the signup OTP is
+      // actually checked -- see the comment in registerDriver above for why this changed.
       const user = await this.prisma.user.create({
         data: {
           name: dto.name,
           phone: dto.phone,
           email: dto.email,
           passwordHash,
-          phoneVerified: true,
+          phoneVerified: false,
         },
       });
       return this.omitPasswordHash(user);
@@ -94,7 +99,7 @@ export class AuthService {
   }
 
   async requestOtp(dto: OtpRequestDto) {
-    const code = this.otp.request(SIGNUP_OTP_PURPOSE, dto.phone);
+    const code = await this.otp.request(SIGNUP_OTP_PURPOSE, dto.phone);
 
     // The account signing up gave both a phone and (optionally) an email -- SMS delivery is still
     // just the OtpService console-log stub (no Twilio account exists), but email delivery is real
@@ -109,7 +114,7 @@ export class AuthService {
   }
 
   async verifyOtp(dto: OtpVerifyDto) {
-    const valid = this.otp.verify(SIGNUP_OTP_PURPOSE, dto.phone, dto.code);
+    const valid = await this.otp.verify(SIGNUP_OTP_PURPOSE, dto.phone, dto.code);
     if (!valid) {
       throw new UnauthorizedException('Invalid or expired code');
     }
@@ -132,16 +137,15 @@ export class AuthService {
       where: { OR: [{ phone: dto.identifier }, { email: dto.identifier }] },
     });
     if (driver && (await argon2.verify(driver.passwordHash, dto.password))) {
-      if (driver.verificationStatus !== 'approved' || !driver.phoneVerified) {
-        await this.prisma.driver.update({
-          where: { id: driver.id },
-          data: { verificationStatus: 'approved', phoneVerified: true },
-        });
-      }
+      // Used to force verificationStatus/phoneVerified to approved/true here on every successful
+      // login, regardless of their actual state -- a workaround for OTP verification never really
+      // working (see otp.service.ts's history). Now that verifyOtp is the real, sole setter of
+      // phoneVerified, login must not silently overwrite it; it only reports the driver's actual
+      // current status.
       return {
         ...this.issueTokens({ sub: driver.id, role: 'driver' }),
         role: 'driver' as const,
-        verificationStatus: 'approved',
+        verificationStatus: driver.verificationStatus,
       };
     }
 
@@ -185,7 +189,7 @@ export class AuthService {
     // Same response whether or not the account exists -- otherwise this endpoint would let anyone
     // check which phones/emails have accounts just by watching which response they get back.
     if (account) {
-      const code = this.otp.request(PASSWORD_RESET_OTP_PURPOSE, dto.identifier);
+      const code = await this.otp.request(PASSWORD_RESET_OTP_PURPOSE, dto.identifier);
       if (account.email) {
         await this.email.sendOtpCode(account.email, code);
       }
@@ -194,7 +198,7 @@ export class AuthService {
   }
 
   async verifyPasswordReset(dto: PasswordResetVerifyDto) {
-    const valid = this.otp.verify(
+    const valid = await this.otp.verify(
       PASSWORD_RESET_OTP_PURPOSE,
       dto.identifier,
       dto.code,
