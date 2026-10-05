@@ -11,7 +11,9 @@ import { themeColors } from "@/constants/theme-colors";
 import { formatCurrency } from "@/utils/currency";
 import { RideRequestCard, type RideRequest } from "@/components/ride-request-card";
 import { consumeDrawerOpenRequest } from "@/utils/drawer-open-request";
-import { apiClient } from "@/lib/api-client";
+import { apiClient, getApiErrorMessage, getApiErrorStatus } from "@/lib/api-client";
+import { negotiationApi } from "@/lib/api/negotiation";
+import { describeNegotiationError } from "@/lib/negotiation-errors";
 import { socketClient } from "@/lib/realtime/socket-client";
 import { NativeMap } from "@/components/native-map";
 import { useLocationStore } from "@/store/location-store";
@@ -120,6 +122,35 @@ interface ApiAvailableRide {
     name: string;
     rating: number | null;
   };
+  // Only the requesting driver's own negotiation (backend scopes it), with at most the latest
+  // pending offer.
+  negotiations?: {
+    id: string;
+    driverId: string;
+    status: string;
+    currentAmount: number | string;
+    currentProposerId: string;
+    offers?: { id: string; status: string; expiresAt: string }[];
+  }[];
+}
+
+// Derives the card's negotiation info. The backend only returns this driver's own negotiation, so
+// negotiation.driverId IS the signed-in driver's id -- no need to read it from the auth store.
+function toRequestNegotiation(ride: ApiAvailableRide): RideRequest["negotiation"] {
+  const n = ride.negotiations?.find((neg) => neg.status === "active");
+  if (!n) return undefined;
+  const pending = n.offers?.[0];
+  const pendingValid =
+    !!pending && pending.status === "pending" && new Date(pending.expiresAt).getTime() > Date.now();
+  const driverLastProposed = n.currentProposerId === n.driverId;
+  if (!driverLastProposed && !pendingValid) return undefined;
+  return {
+    negotiationId: n.id,
+    status: n.status,
+    currentAmount: Number(n.currentAmount),
+    yourTurn: !driverLastProposed && pendingValid,
+    pendingOfferId: !driverLastProposed && pendingValid ? pending!.id : undefined,
+  };
 }
 
 export default function DriverDashboardScreen() {
@@ -207,40 +238,66 @@ export default function DriverDashboardScreen() {
     };
   }, [status, queryClient]);
 
-  const apiRequests: RideRequest[] = (availableRides || []).map((ride) => ({
-    id: ride.id,
-    name: ride.passenger?.name || "Passenger",
-    rating: ride.passenger?.rating ?? 4.9,
-    offer: Number(ride.proposedFare),
-    pickupLabel: ride.pickupAddress,
-    pickupMeta: `${ride.etaMinutes} min`,
-    dropoffLabel: ride.dropoffAddress,
-    dropoffMeta: `${ride.distanceKm} km`,
-    totalMinutes: ride.etaMinutes,
-    ratePerMin: Number((Number(ride.proposedFare) / (ride.etaMinutes || 1)).toFixed(2)),
-    pickupLat: ride.pickupLat,
-    pickupLng: ride.pickupLng,
-    dropoffLat: ride.dropoffLat,
-    dropoffLng: ride.dropoffLng,
-  }));
+  const apiRequests: RideRequest[] = (availableRides || []).map((ride) => {
+    const negotiation = toRequestNegotiation(ride);
+    const offer = negotiation ? negotiation.currentAmount : Number(ride.proposedFare);
+    return {
+      id: ride.id,
+      name: ride.passenger?.name || "Passenger",
+      rating: ride.passenger?.rating ?? null,
+      offer,
+      negotiation,
+      pickupLabel: ride.pickupAddress,
+      pickupMeta: `${ride.etaMinutes} min`,
+      dropoffLabel: ride.dropoffAddress,
+      dropoffMeta: `${ride.distanceKm} km`,
+      totalMinutes: ride.etaMinutes,
+      ratePerMin: Number((offer / (ride.etaMinutes || 1)).toFixed(2)),
+      pickupLat: ride.pickupLat,
+      pickupLng: ride.pickupLng,
+      dropoffLat: ride.dropoffLat,
+      dropoffLng: ride.dropoffLng,
+    };
+  });
 
   const activeRequests = apiRequests.filter((req) => !dismissedRequestIds.has(req.id));
 
   const handleAcceptRide = async (request: RideRequest) => {
     clearRequestTimer(request.id);
     setAcceptError(null);
+    let agreedFare = request.offer;
     try {
       if (!request.id.startsWith("req-")) {
-        await apiClient.patch(`/rides/${request.id}/status`, { status: "accepted" });
+        if (request.negotiation?.pendingOfferId) {
+          // Never the legacy PATCH path when a negotiation exists.
+          const res = await negotiationApi.acceptNegotiation(
+            request.id,
+            request.negotiation.pendingOfferId,
+          );
+          const finalFare = Number(res.ride?.finalFare);
+          if (Number.isFinite(finalFare) && finalFare > 0) agreedFare = finalFare;
+        } else {
+          await apiClient.patch(`/rides/${request.id}/status`, { status: "accepted" });
+        }
         queryClient.invalidateQueries({ queryKey: ["rides"] });
       }
-    } catch (err: any) {
-      if (err?.response?.status === 409) {
+    } catch (err: unknown) {
+      if (request.negotiation?.pendingOfferId) {
+        setAcceptError(
+          describeNegotiationError(err, "driver", "Failed to accept offer. Please try again.")
+            .message,
+        );
+      } else if (
+        getApiErrorStatus(err) === 409 &&
+        /negotiation/i.test(getApiErrorMessage(err, ""))
+      ) {
+        setAcceptError("The price is being negotiated. Check for the passenger's latest offer.");
+      } else if (getApiErrorStatus(err) === 409) {
         setAcceptError("This ride is no longer available.");
       } else {
         setAcceptError("Failed to accept ride. Please try again.");
       }
-      queryClient.invalidateQueries({ queryKey: ["rides", "available"] });
+      queryClient.invalidateQueries({ queryKey: ["rides"] });
       return;
     }
     router.push({
@@ -248,8 +305,8 @@ export default function DriverDashboardScreen() {
       params: {
         rideId: request.id,
         name: request.name,
-        rating: String(request.rating),
-        fare: String(request.offer),
+        rating: request.rating != null ? String(request.rating) : undefined,
+        fare: String(agreedFare),
         pickup: request.pickupLabel,
         dropoff: request.dropoffLabel,
         pickupLat: request.pickupLat != null ? String(request.pickupLat) : undefined,

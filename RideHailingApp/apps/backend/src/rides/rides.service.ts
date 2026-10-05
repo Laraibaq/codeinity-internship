@@ -246,6 +246,17 @@ export class RidesService {
         offers: {
           where: { driverId },
         },
+        // Only the requesting driver's own negotiation -- never other drivers'.
+        negotiations: {
+          where: { driverId },
+          include: {
+            offers: {
+              where: { status: 'pending' },
+              orderBy: { createdAt: 'desc' },
+              take: 1,
+            },
+          },
+        },
       },
     });
   }

@@ -1,8 +1,7 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
-  Image,
   Pressable,
   StyleSheet,
   StatusBar,
@@ -21,9 +20,6 @@ import { useRouter } from "expo-router";
 import { MaterialIcons } from "@expo/vector-icons";
 import { themeColors } from "@/constants/theme-colors";
 
-const MAP_URI =
-  "https://lh3.googleusercontent.com/aida-public/AB6AXuCLmtYG-O5KNyCvYg7w0D4H6ux0GbjI_IzYgxDdf6EaZKCqPB_snNTaEwANhJA4Xun2b5hm_ZqIBcey4FsKF700EzUzHYaITWg4YkUM8XQEYcBMsG16irZF9jFiAyQLxSKDgkv_AwLIDlMLMd_QbplVyFYxm3qkTRWRwuCQ7mgnIc6aJtzNvfV77gX-i1zeZjOksupPTNgYq8bwpVDnvNPQDsdv1p1Wo5i09wblwHdQe-NaHFLcT3jt";
-
 const ERROR_COLOR = "#ba1a1a";
 const ERROR_CONTAINER = "#ffdad6";
 
@@ -32,9 +28,17 @@ type SearchState = "searching" | "no_drivers";
 import { usePassengerRideStore, type DriverOffer } from "@/store/passenger/passenger-ride-store";
 import { passengerOffersApi } from "@/lib/api/passenger/offers";
 import { DriverOfferCard } from "@/components/passenger/driver-offer-card";
+import { PassengerMap } from "@/components/passenger/passenger-map";
+import { NearbyDriverMarkers } from "@/components/passenger/nearby-driver-markers";
 import { apiClient } from "@/lib/api-client";
 import { socketClient } from "@/lib/realtime/socket-client";
-import { negotiationApi, type AiFareSuggestion } from "@/lib/api/negotiation";
+import { negotiationApi } from "@/lib/api/negotiation";
+import { nearbyDriversApi, type NearbyDriver } from "@/lib/api/passenger/nearby-drivers";
+import { bidsFromNegotiations, type PendingCounter } from "@/lib/passenger-bids";
+import { describeNegotiationError } from "@/lib/negotiation-errors";
+import { formatCurrency } from "@/utils/currency";
+
+const NEARBY_REFRESH_MS = 10000;
 
 export default function PassengerDriverOffersScreen() {
   const router = useRouter();
@@ -48,11 +52,16 @@ export default function PassengerDriverOffersScreen() {
     setOffers,
     selectOffer,
     setRideStatus,
+    selectedRideType,
+    fareQuotes,
   } = usePassengerRideStore();
+  const quote = fareQuotes[selectedRideType];
   const [state, setState] = useState<SearchState>("searching");
   const [isAccepting, setIsAccepting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [aiSuggestion, setAiSuggestion] = useState<AiFareSuggestion | null>(null);
+  const [waiting, setWaiting] = useState<PendingCounter[]>([]);
+  const [nearbyDrivers, setNearbyDrivers] = useState<NearbyDriver[]>([]);
+  const offersRef = useRef<DriverOffer[]>([]);
   const [counteringOffer, setCounteringOffer] = useState<DriverOffer | null>(null);
   const [counterFare, setCounterFare] = useState<number>(0);
   const [isSubmittingCounter, setIsSubmittingCounter] = useState(false);
@@ -126,7 +135,7 @@ export default function PassengerDriverOffersScreen() {
 
     const fetchOffersAndStatus = async () => {
       try {
-        // 1. Check ride status (in case driver direct-accepted)
+        // 1. Check ride status (in case a driver direct-accepted the original ask)
         const rideRes = await apiClient.get<any>(`/rides/${effectiveRideId}`);
         if (!isMounted) return;
 
@@ -134,16 +143,16 @@ export default function PassengerDriverOffersScreen() {
           const driver = rideRes.data.driver;
           const assignedOffer: DriverOffer = {
             id: `assigned-${driver.id}`,
+            negotiationId: "",
             driverId: driver.id,
             driverName: driver.name,
-            driverRating: driver.rating || 4.9,
+            driverRating: typeof driver.rating === "number" ? driver.rating : null,
             driverPhotoUrl: driver.profilePhotoUrl,
-            vehicleModel: driver.vehicle ? `${driver.vehicle.make || ""} ${driver.vehicle.model || ""}`.trim() || "Standard" : "Standard",
-            vehiclePlate: driver.vehicle?.registrationNumber || "ABC-123",
-            vehicleColor: driver.vehicle?.color,
-            offeredFare: Number(rideRes.data.finalFare || rideRes.data.proposedFare),
-            distanceKm: 1.0,
-            estimatedArrivalMinutes: 3,
+            vehicleModel: [driver.vehicle?.make, driver.vehicle?.model].filter(Boolean).join(" "),
+            vehiclePlate: driver.vehicle?.registrationNumber ?? null,
+            vehicleColor: driver.vehicle?.color ?? undefined,
+            offeredFare: Number(rideRes.data.finalFare ?? rideRes.data.proposedFare),
+            estimatedArrivalMinutes: null,
           };
           selectOffer(assignedOffer);
           setRideStatus("driver_assigned");
@@ -151,12 +160,14 @@ export default function PassengerDriverOffersScreen() {
           return;
         }
 
-        // 2. Fetch driver offers
-        const offersData = await passengerOffersApi.getRidesOffers(effectiveRideId);
+        // 2. Driver bids = pending driver counter-offers in the ride's negotiations
+        const sessions = await negotiationApi.getNegotiations(effectiveRideId);
         if (!isMounted) return;
 
-        const pendingOffers = offersData.filter((o: any) => o.status === "pending");
-        setOffers(pendingOffers);
+        const { bids, waiting: waitingCounters } = bidsFromNegotiations(sessions);
+        offersRef.current = bids;
+        setOffers(bids);
+        setWaiting(waitingCounters);
       } catch (err: any) {
         console.warn("Error polling driver offers:", err);
       }
@@ -164,14 +175,6 @@ export default function PassengerDriverOffersScreen() {
 
     // Initial fetch
     fetchOffersAndStatus();
-
-    // Fetch advisory fare suggestion
-    negotiationApi
-      .getFareSuggestion(effectiveRideId)
-      .then((sugg) => {
-        if (isMounted) setAiSuggestion(sugg);
-      })
-      .catch(() => {});
 
     // Connect socket and join ride room
     socketClient.connect().then(() => {
@@ -199,7 +202,7 @@ export default function PassengerDriverOffersScreen() {
 
     // Timeout to "no_drivers" after 60s if 0 offers
     timeoutTimer = setTimeout(() => {
-      if (isMounted && offers.length === 0) {
+      if (isMounted && offersRef.current.length === 0) {
         setState("no_drivers");
       }
     }, 60000);
@@ -217,6 +220,31 @@ export default function PassengerDriverOffersScreen() {
       if (timeoutTimer) clearTimeout(timeoutTimer);
     };
   }, [effectiveRideId]);
+
+  // Real nearby drivers for the map (coarse positions only, see GET /drivers/nearby).
+  useEffect(() => {
+    if (!pickup) return;
+    let isMounted = true;
+    const vehicleType = quote?.vehicleType;
+    const load = async () => {
+      try {
+        const res = await nearbyDriversApi.getNearby({
+          lat: pickup.latitude,
+          lng: pickup.longitude,
+          vehicleType,
+        });
+        if (isMounted) setNearbyDrivers(res.drivers);
+      } catch {
+        // Map markers are best-effort; the search itself does not depend on them.
+      }
+    };
+    load();
+    const t = setInterval(load, NEARBY_REFRESH_MS);
+    return () => {
+      isMounted = false;
+      clearInterval(t);
+    };
+  }, [pickup?.latitude, pickup?.longitude, quote?.vehicleType]);
 
   const ring1Style = useAnimatedStyle(() => ({
     transform: [{ scale: ring1Scale.value }],
@@ -259,48 +287,70 @@ export default function PassengerDriverOffersScreen() {
     router.push("/(passenger)/ride-cancel-confirm" as any);
   };
 
+  const refreshBids = async () => {
+    if (!effectiveRideId) return;
+    try {
+      const sessions = await negotiationApi.getNegotiations(effectiveRideId);
+      const { bids, waiting: waitingCounters } = bidsFromNegotiations(sessions);
+      offersRef.current = bids;
+      setOffers(bids);
+      setWaiting(waitingCounters);
+    } catch {
+      // The next poll will retry.
+    }
+  };
+
+  // Accepting a driver's bid always goes through the negotiation-accept endpoint, which settles
+  // Ride.finalFare at exactly the amount on the offer the passenger is looking at.
   const handleAcceptOffer = async (offer: DriverOffer) => {
     if (!effectiveRideId || isAccepting) return;
     setIsAccepting(true);
     setErrorMessage(null);
     try {
-      await passengerOffersApi.acceptOffer(effectiveRideId, offer.id);
-      selectOffer(offer);
+      const res = await negotiationApi.acceptNegotiation(effectiveRideId, offer.id);
+      const agreed = Number(res?.ride?.finalFare);
+      selectOffer(Number.isFinite(agreed) && agreed > 0 ? { ...offer, offeredFare: agreed } : offer);
       setRideStatus("driver_assigned");
       router.push("/(passenger)/ride-tracking" as any);
-    } catch (err: any) {
-      console.error("Failed to accept offer:", err);
-      const msg = err?.response?.data?.message || "Failed to accept offer. It may have expired.";
-      setErrorMessage(msg);
-      // Refresh offers
-      if (effectiveRideId) {
-        const updated = await passengerOffersApi.getRidesOffers(effectiveRideId);
-        setOffers(updated.filter((o: any) => o.status === "pending"));
-      }
+    } catch (err: unknown) {
+      const failure = describeNegotiationError(err, "passenger", "Could not accept this offer. Please try again.");
+      setErrorMessage(failure.message);
+      if (failure.refresh) await refreshBids();
     } finally {
       setIsAccepting(false);
     }
   };
 
-  const handleDeclineOffer = async (offerId: string) => {
-    if (!effectiveRideId) return;
+  const handleRejectOffer = async (offer: DriverOffer) => {
+    if (!effectiveRideId || isAccepting) return;
+    setErrorMessage(null);
     try {
-      await passengerOffersApi.declineOffer(effectiveRideId, offerId);
-      setOffers(offers.filter((o) => o.id !== offerId));
-    } catch (err) {
-      console.warn("Failed to decline offer:", err);
+      await negotiationApi.rejectNegotiation(effectiveRideId, offer.negotiationId);
+      setOffers(offers.filter((o) => o.id !== offer.id));
+      offersRef.current = offersRef.current.filter((o) => o.id !== offer.id);
+    } catch (err: unknown) {
+      const failure = describeNegotiationError(err, "passenger", "Could not reject this offer. Please try again.");
+      setErrorMessage(failure.message);
+      if (failure.refresh) await refreshBids();
     }
+  };
+
+  // Counter stepper range and step come from the server quote for this ride's tier.
+  const snapToStep = (value: number) => {
+    if (!quote) return value;
+    const stepped = Math.round(value / quote.fareStep) * quote.fareStep;
+    return Math.min(quote.maximumFare, Math.max(quote.minimumFare, stepped));
   };
 
   const handleCounterOffer = (offer: DriverOffer) => {
     setCounteringOffer(offer);
-    const mid = Math.round(((offer.offeredFare + (proposedFare || offer.offeredFare)) / 2) * 10) / 10;
-    setCounterFare(mid > 0 ? mid : offer.offeredFare);
+    setCounterFare(snapToStep((offer.offeredFare + (proposedFare || offer.offeredFare)) / 2));
   };
 
   const handleSubmitCounter = async () => {
     if (!effectiveRideId || !counteringOffer || isSubmittingCounter) return;
     setIsSubmittingCounter(true);
+    setErrorMessage(null);
     try {
       await negotiationApi.passengerCounter(
         effectiveRideId,
@@ -308,27 +358,46 @@ export default function PassengerDriverOffersScreen() {
         counterFare,
       );
       setCounteringOffer(null);
-      // Refresh offers
-      const updated = await passengerOffersApi.getRidesOffers(effectiveRideId);
-      setOffers(updated.filter((o: any) => o.status === "pending"));
-    } catch (err: any) {
-      console.error("Failed to submit counter offer:", err);
-      const msg = err?.response?.data?.message || "Failed to submit counter offer.";
-      setErrorMessage(msg);
+      await refreshBids();
+    } catch (err: unknown) {
+      const failure = describeNegotiationError(err, "passenger", "Could not send your counter-offer.");
+      setErrorMessage(failure.message);
       setCounteringOffer(null);
+      if (failure.refresh) await refreshBids();
     } finally {
       setIsSubmittingCounter(false);
     }
   };
+
+  const searchMap = (
+    <PassengerMap
+      pickup={pickup ? { latitude: pickup.latitude, longitude: pickup.longitude } : null}
+      showUserLocation={false}
+      autoFitRoute={false}
+      initialRegion={
+        pickup
+          ? {
+              latitude: pickup.latitude,
+              longitude: pickup.longitude,
+              latitudeDelta: 0.04,
+              longitudeDelta: 0.04,
+            }
+          : undefined
+      }
+      style={styles.mapBg}
+    >
+      <NearbyDriverMarkers drivers={nearbyDrivers} />
+    </PassengerMap>
+  );
 
   if (state === "no_drivers") {
     return (
       <View style={styles.root}>
         <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
 
-        {/* Blurred/dimmed map */}
-        <Image source={{ uri: MAP_URI }} style={[styles.mapBg, styles.mapBlur]} resizeMode="cover" />
-        <View style={styles.dimOverlay} />
+        {/* Dimmed map */}
+        {searchMap}
+        <View style={styles.dimOverlay} pointerEvents="none" />
 
         {/* Close button */}
         <View style={styles.topNavNoDrivers}>
@@ -394,8 +463,8 @@ export default function PassengerDriverOffersScreen() {
     <View style={styles.root}>
       <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
 
-      {/* Map */}
-      <Image source={{ uri: MAP_URI }} style={styles.mapBg} resizeMode="cover" />
+      {/* Map: the passenger's pickup and real nearby available drivers */}
+      {searchMap}
 
       {/* Bottom gradient */}
       <View style={styles.bottomGradient} />
@@ -439,15 +508,21 @@ export default function PassengerDriverOffersScreen() {
               </View>
             </View>
 
+            {waiting.map((w, i) => (
+              <Text key={`${w.driverName}-${i}`} style={styles.offersSubtitle}>
+                Waiting for {w.driverName} to answer your {formatCurrency(w.amount)} counter
+              </Text>
+            ))}
+
             <View style={styles.offersListContainer}>
               {offers.map((offer) => (
                 <DriverOfferCard
                   key={offer.id}
                   offer={offer}
                   onAccept={handleAcceptOffer}
-                  onDecline={handleDeclineOffer}
-                  onCounter={handleCounterOffer}
-                  aiSuggestionFare={aiSuggestion?.suggestedFare}
+                  onReject={handleRejectOffer}
+                  onCounter={quote ? handleCounterOffer : undefined}
+                  disabled={isAccepting}
                 />
               ))}
             </View>
@@ -474,7 +549,7 @@ export default function PassengerDriverOffersScreen() {
             </Text>
             {proposedFare ? (
               <Text style={styles.searchingFare}>
-                Offered Fare: ${proposedFare.toFixed(2)}
+                Offered Fare: {formatCurrency(proposedFare)}
               </Text>
             ) : null}
 
@@ -507,29 +582,30 @@ export default function PassengerDriverOffersScreen() {
 
             <View style={styles.counterStepperRow}>
               <Pressable
-                onPress={() => setCounterFare((v) => Math.max(1, Math.round((v - 0.5) * 10) / 10))}
-                style={styles.stepperBtn}
+                onPress={() => setCounterFare((v) => snapToStep(v - (quote?.fareStep ?? 0)))}
+                disabled={!quote || counterFare <= quote.minimumFare}
+                accessibilityLabel="Decrease counter fare"
+                style={[styles.stepperBtn, (!quote || counterFare <= quote.minimumFare) && { opacity: 0.35 }]}
               >
                 <MaterialIcons name="remove" size={24} color={themeColors.primary} />
               </Pressable>
               <Text style={styles.counterFareText}>
-                ${counterFare.toFixed(2)}
+                {formatCurrency(counterFare)}
               </Text>
               <Pressable
-                onPress={() => setCounterFare((v) => Math.round((v + 0.5) * 10) / 10)}
-                style={styles.stepperBtn}
+                onPress={() => setCounterFare((v) => snapToStep(v + (quote?.fareStep ?? 0)))}
+                disabled={!quote || counterFare >= quote.maximumFare}
+                accessibilityLabel="Increase counter fare"
+                style={[styles.stepperBtn, (!quote || counterFare >= quote.maximumFare) && { opacity: 0.35 }]}
               >
                 <MaterialIcons name="add" size={24} color={themeColors.primary} />
               </Pressable>
             </View>
 
-            {aiSuggestion && (
-              <View style={styles.modalAiBadge}>
-                <MaterialIcons name="auto-awesome" size={14} color={themeColors.primary} />
-                <Text style={styles.modalAiText}>
-                  AI Range: ${aiSuggestion.minBound.toFixed(0)} - ${aiSuggestion.maxBound.toFixed(0)} (Advisory)
-                </Text>
-              </View>
+            {quote && (
+              <Text style={styles.modalAiText}>
+                Allowed range {formatCurrency(quote.minimumFare)} – {formatCurrency(quote.maximumFare)}
+              </Text>
             )}
 
             <View style={styles.modalActionRow}>

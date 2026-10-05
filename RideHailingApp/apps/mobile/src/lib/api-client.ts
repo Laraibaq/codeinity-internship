@@ -141,6 +141,14 @@ export function getApiErrorMessage(error: unknown, fallback: string): string {
   return fallback;
 }
 
+// Machine-readable reason the backend attaches to some errors (e.g. OFFER_EXPIRED); see
+// AllExceptionsFilter. Undefined for errors that carry none.
+export function getApiErrorCode(error: unknown): string | undefined {
+  if (!axios.isAxiosError(error)) return undefined;
+  const code = (error.response?.data as { code?: unknown } | undefined)?.code;
+  return typeof code === "string" ? code : undefined;
+}
+
 export function getApiErrorStatus(error: unknown): number | undefined {
   return axios.isAxiosError(error) ? error.response?.status : undefined;
 }

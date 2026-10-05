@@ -22,17 +22,22 @@ export type PassengerRideStatus =
   | "cancelled";
 
 export interface DriverOffer {
+  // NegotiationOffer id -- what the negotiation accept endpoint takes. For a ride a driver
+  // direct-accepted there is no offer, and this is a synthetic `assigned-<driverId>` id.
   id: string;
+  negotiationId: string;
   driverId: string;
   driverName: string;
-  driverRating: number;
+  // Null when the driver has no rating yet; never defaulted to a made-up number.
+  driverRating: number | null;
   driverPhotoUrl?: string;
   vehicleModel: string;
-  vehiclePlate: string;
+  vehiclePlate: string | null;
   vehicleColor?: string;
   offeredFare: number;
-  estimatedArrivalMinutes: number;
-  distanceKm: number;
+  // Estimated minutes to pickup from the driver's last reported position; null if unknown.
+  estimatedArrivalMinutes: number | null;
+  expiresAt?: string;
 }
 
 export interface PassengerRideState {

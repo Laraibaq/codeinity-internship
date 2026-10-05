@@ -230,6 +230,18 @@ describe('RidesService & RidesController (Phase 10 Comprehensive)', () => {
             status: { in: ['requested', 'offered'] },
             driverId: null,
           },
+          include: expect.objectContaining({
+            negotiations: {
+              where: { driverId: mockDriverId },
+              include: {
+                offers: {
+                  where: { status: 'pending' },
+                  orderBy: { createdAt: 'desc' },
+                  take: 1,
+                },
+              },
+            },
+          }),
         }),
       );
       expect(result).toHaveLength(1);
