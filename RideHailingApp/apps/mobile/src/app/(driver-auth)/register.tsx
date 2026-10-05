@@ -106,7 +106,11 @@ export default function DriverRegisterScreen() {
           accessToken: data.accessToken,
           refreshToken: data.refreshToken,
           role: "driver",
-          verificationStatus: "approved",
+          // Was hardcoded "approved" regardless of what the backend actually returned -- a new
+          // driver is pending by default (registration no longer auto-approves; see
+          // auth.service.ts), so this must reflect the real value or the local auth store lies
+          // about it until the next full login.
+          verificationStatus: data.verificationStatus ?? "pending",
         });
       }
       registrationDraft.phone = normalizedPhone;

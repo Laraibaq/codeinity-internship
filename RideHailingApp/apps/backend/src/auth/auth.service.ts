@@ -119,10 +119,16 @@ export class AuthService {
       throw new UnauthorizedException('Invalid or expired code');
     }
 
-    // Mark phoneVerified and auto-approve driver
+    // Phone-ownership verification only. This used to also set a driver's verificationStatus to
+    // 'approved' -- conflating "this phone number belongs to whoever is signing up" with "this
+    // driver's documents/vehicle have been vetted," two different concepts that happen to live on
+    // the same model. A driver's verificationStatus now changes ONLY via an admin action
+    // (AdminService.approveDriver/rejectDriver/suspendDriver in admin.service.ts) -- completing
+    // phone OTP leaves a driver at whatever verificationStatus they already had (pending, by
+    // default, since registerDriver no longer force-approves either).
     await this.prisma.driver.updateMany({
       where: { phone: dto.phone },
-      data: { phoneVerified: true, verificationStatus: 'approved' },
+      data: { phoneVerified: true },
     });
     await this.prisma.user.updateMany({
       where: { phone: dto.phone },
