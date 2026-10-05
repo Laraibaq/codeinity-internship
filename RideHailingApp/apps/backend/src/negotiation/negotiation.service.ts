@@ -10,6 +10,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { AiNegotiationProvider } from './ai-negotiation.provider';
+import { FareQuoteService } from './fare-quote.service';
+import { calculateHaversineDistanceKm } from '../rides/matching.service';
 import { DriverCounterOfferDto, PassengerCounterOfferDto } from './dto/counter-offer.dto';
 import { AiFareSuggestionResponse } from './dto/fare-suggestion.dto';
 import { JwtPayload } from '../auth/jwt-payload.interface';
@@ -24,7 +26,41 @@ export class NegotiationService {
     private readonly realtimeService: RealtimeService,
     private readonly notificationsService: NotificationsService,
     private readonly aiProvider: AiNegotiationProvider,
+    private readonly fareQuoteService: FareQuoteService,
   ) {}
+
+  /**
+   * Counter-offers must stay inside the same server-computed range POST /rides enforces, so the
+   * minimum fare cannot be bypassed by opening at a valid fare and then countering below it.
+   * Rides created before fareTier existed have no tier to price against and are not bounded.
+   */
+  private assertWithinFareBounds(
+    ride: {
+      fareTier: string | null;
+      pickupLat: number;
+      pickupLng: number;
+      dropoffLat: number;
+      dropoffLng: number;
+      distanceKm: number;
+    },
+    amount: number,
+  ) {
+    if (!ride.fareTier) return;
+    const quote = this.fareQuoteService.quote({
+      pickupLat: ride.pickupLat,
+      pickupLng: ride.pickupLng,
+      dropoffLat: ride.dropoffLat,
+      dropoffLng: ride.dropoffLng,
+      distanceKm: ride.distanceKm,
+      fareTier: ride.fareTier as any,
+    });
+    if (amount < quote.minimumFare || amount > quote.maximumFare) {
+      throw new BadRequestException({
+        message: `Offer must be between PKR ${quote.minimumFare} and PKR ${quote.maximumFare} for this trip`,
+        code: 'OFFER_OUT_OF_RANGE',
+      });
+    }
+  }
 
   /**
    * Retrieves active negotiation sessions for a ride.
@@ -36,12 +72,24 @@ export class NegotiationService {
         negotiations: {
           include: {
             driver: {
+              // Explicit allow-list: the passenger sees who is coming and in what, never the
+              // driver's documents, raw coordinates or contact details beyond name/phone.
               select: {
                 id: true,
                 name: true,
                 phone: true,
                 rating: true,
-                vehicle: true,
+                currentLat: true,
+                currentLng: true,
+                vehicle: {
+                  select: {
+                    type: true,
+                    make: true,
+                    model: true,
+                    color: true,
+                    registrationNumber: true,
+                  },
+                },
               },
             },
             offers: {
@@ -60,7 +108,21 @@ export class NegotiationService {
       if (ride.passengerId !== user.sub) {
         throw new ForbiddenException('You can only access negotiations for your own ride');
       }
-      return ride.negotiations;
+      return ride.negotiations.map(({ driver, ...n }) => {
+        const { currentLat, currentLng, ...publicDriver } = driver;
+        // ETA is an estimate from the driver's last reported position (straight line at the same
+        // 2 min/km city-speed assumption the matcher uses); null when the driver has no position.
+        const hasPosition = currentLat != null && currentLng != null;
+        const driverDistanceKm = hasPosition
+          ? calculateHaversineDistanceKm(ride.pickupLat, ride.pickupLng, currentLat, currentLng)
+          : null;
+        return {
+          ...n,
+          driver: publicDriver,
+          driverDistanceKm,
+          etaMinutes: driverDistanceKm != null ? Math.max(1, Math.round(driverDistanceKm * 2)) : null,
+        };
+      });
     }
 
     if (user.role === 'driver') {
@@ -92,6 +154,8 @@ export class NegotiationService {
     if (ride.driverId && ride.driverId !== driverId) {
       throw new ConflictException('Ride has already been assigned to another driver');
     }
+
+    this.assertWithinFareBounds(ride, dto.offerAmount);
 
     const amountDecimal = new Prisma.Decimal(dto.offerAmount.toFixed(2));
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
@@ -166,6 +230,13 @@ export class NegotiationService {
           data: { status: 'offered' },
         });
       }
+
+      // Retire this driver's older pending legacy rows (incl. the matcher's original ask) so no
+      // surface can still show or accept them at a price that has since moved.
+      await tx.rideOffer.updateMany({
+        where: { rideId, driverId, status: 'pending', id: { not: offer.id } },
+        data: { status: 'rejected' },
+      });
 
       // Synchronize with legacy RideOffer for backward compatibility
       await tx.rideOffer.upsert({
@@ -263,6 +334,8 @@ export class NegotiationService {
     if (!negotiation || negotiation.status !== 'active') {
       throw new BadRequestException('No active negotiation found with this driver');
     }
+
+    this.assertWithinFareBounds(ride, dto.offerAmount);
 
     const amountDecimal = new Prisma.Decimal(dto.offerAmount.toFixed(2));
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
@@ -382,7 +455,14 @@ export class NegotiationService {
             const currentRide = await tx.ride.findUnique({ where: { id: rideId } });
             return { offer, ride: currentRide!, isAlreadyAccepted: true };
           }
-          throw new BadRequestException(`Offer is no longer pending (status: ${offer.status})`);
+          // 'superseded' means a newer counter replaced this price while the user was looking at it.
+          throw new ConflictException({
+            message:
+              offer.status === 'superseded'
+                ? 'The price changed while you were deciding. Review the latest offer.'
+                : `Offer is no longer pending (status: ${offer.status})`,
+            code: offer.status === 'superseded' ? 'PRICE_CHANGED' : 'OFFER_NOT_PENDING',
+          });
         }
 
         if (offer.expiresAt < new Date()) {
@@ -390,7 +470,10 @@ export class NegotiationService {
             where: { id: offerId },
             data: { status: 'expired' },
           });
-          throw new BadRequestException('Negotiation offer has expired');
+          throw new BadRequestException({
+            message: 'This offer has expired.',
+            code: 'OFFER_EXPIRED',
+          });
         }
 
         // Proposer cannot accept their own offer
@@ -410,11 +493,17 @@ export class NegotiationService {
         }
 
         if (ride.status !== 'requested' && ride.status !== 'offered') {
-          throw new ConflictException(`Ride is no longer available (status: ${ride.status})`);
+          throw new ConflictException({
+            message: `Ride is no longer available (status: ${ride.status})`,
+            code: 'RIDE_UNAVAILABLE',
+          });
         }
 
         if (ride.driverId !== null) {
-          throw new ConflictException('Ride has already been assigned to a driver');
+          throw new ConflictException({
+            message: 'This ride has already been taken.',
+            code: 'RIDE_TAKEN',
+          });
         }
 
         const winningDriverId = offer.negotiation.driverId;
@@ -427,7 +516,10 @@ export class NegotiationService {
           },
         });
         if (occupiedRide) {
-          throw new ConflictException('Driver is currently occupied with another ride');
+          throw new ConflictException({
+            message: 'This driver is no longer available.',
+            code: 'DRIVER_BUSY',
+          });
         }
 
         const acceptedAt = new Date();

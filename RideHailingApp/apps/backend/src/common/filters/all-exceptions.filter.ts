@@ -68,6 +68,11 @@ export class AllExceptionsFilter implements ExceptionFilter {
       timestamp: new Date().toISOString(),
       path: request?.url,
       message,
+      // Optional machine-readable reason (e.g. OFFER_EXPIRED) so clients can branch on it
+      // instead of string-matching message text.
+      ...(isHttpException && typeof errorResponse === 'object' && (errorResponse as any)?.code
+        ? { code: (errorResponse as any).code }
+        : {}),
     });
   }
 }

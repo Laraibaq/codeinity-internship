@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { NegotiationService } from './negotiation.service';
 import { AiNegotiationProvider } from './ai-negotiation.provider';
+import { FareQuoteService } from './fare-quote.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -70,6 +71,7 @@ describe('NegotiationService & AiNegotiationProvider Unit Tests', () => {
       providers: [
         NegotiationService,
         AiNegotiationProvider,
+        FareQuoteService,
         { provide: PrismaService, useValue: prisma },
         { provide: RealtimeService, useValue: realtimeService },
         { provide: NotificationsService, useValue: notificationsService },
@@ -292,6 +294,133 @@ describe('NegotiationService & AiNegotiationProvider Unit Tests', () => {
         data: { status: 'rejected' },
       });
       expect(realtimeService.emitNegotiationAccepted).toHaveBeenCalled();
+    });
+  });
+
+  describe('3b. Accept failure states carry machine-readable codes', () => {
+    const passenger = { sub: mockPassengerId, role: 'passenger' } as any;
+    const pendingOffer = (over: any = {}) => ({
+      id: mockOfferId,
+      rideId: mockRideId,
+      proposerId: mockDriverId,
+      recipientId: mockPassengerId,
+      status: 'pending',
+      expiresAt: new Date(Date.now() + 600000),
+      negotiation: { driverId: mockDriverId },
+      ...over,
+    });
+    const codeOf = async (p: Promise<any>) => {
+      try {
+        await p;
+      } catch (e: any) {
+        return e.getResponse().code;
+      }
+      return undefined;
+    };
+
+    it('OFFER_EXPIRED when the offer is past its expiry', async () => {
+      prisma.negotiationOffer.findUnique.mockResolvedValue(
+        pendingOffer({ expiresAt: new Date(Date.now() - 1000) }),
+      );
+      expect(await codeOf(service.acceptNegotiation(mockRideId, passenger, mockOfferId))).toBe('OFFER_EXPIRED');
+    });
+
+    it('PRICE_CHANGED when the offer was superseded by a newer counter', async () => {
+      prisma.negotiationOffer.findUnique.mockResolvedValue(pendingOffer({ status: 'superseded' }));
+      expect(await codeOf(service.acceptNegotiation(mockRideId, passenger, mockOfferId))).toBe('PRICE_CHANGED');
+    });
+
+    it('RIDE_TAKEN when another driver already holds the ride', async () => {
+      prisma.negotiationOffer.findUnique.mockResolvedValue(pendingOffer());
+      prisma.ride.findUnique.mockResolvedValue({ id: mockRideId, status: 'offered', driverId: mockCompetingDriverId });
+      expect(await codeOf(service.acceptNegotiation(mockRideId, passenger, mockOfferId))).toBe('RIDE_TAKEN');
+    });
+  });
+
+  describe('3c. Counter-offers stay inside the server fare range', () => {
+    // standard tier, 5.2 km, ~1.1 km straight line: allowed PKR 250 - 700
+    const pricedRide = {
+      id: mockRideId,
+      passengerId: mockPassengerId,
+      driverId: null,
+      status: 'offered',
+      fareTier: 'standard',
+      pickupLat: 0,
+      pickupLng: 0,
+      dropoffLat: 0,
+      dropoffLng: 0.01,
+      distanceKm: 5.2,
+    };
+
+    it('rejects a passenger counter below the minimum fare', async () => {
+      prisma.ride.findUnique.mockResolvedValue(pricedRide);
+      prisma.negotiation.findUnique.mockResolvedValue({ id: mockNegotiationId, status: 'active' });
+
+      await expect(
+        service.passengerCounter(mockRideId, mockPassengerId, { driverId: mockDriverId, offerAmount: 100 } as any),
+      ).rejects.toThrow(/between PKR 250 and PKR 700/);
+      expect(prisma.negotiationOffer.create).not.toHaveBeenCalled();
+    });
+
+    it('rejects a driver counter above the maximum fare', async () => {
+      prisma.driver.findUnique.mockResolvedValue({ id: mockDriverId, verificationStatus: 'approved' });
+      prisma.ride.findUnique.mockResolvedValue(pricedRide);
+
+      await expect(
+        service.driverCounter(mockRideId, mockDriverId, { offerAmount: 5000 } as any),
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.negotiation.upsert).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('3d. Passenger negotiation view', () => {
+    it('exposes only an allow-listed driver/vehicle shape, with an ETA but no raw coordinates', async () => {
+      prisma.ride.findUnique.mockResolvedValue({
+        id: mockRideId,
+        passengerId: mockPassengerId,
+        pickupLat: 0,
+        pickupLng: 0,
+        negotiations: [
+          {
+            id: mockNegotiationId,
+            driverId: mockDriverId,
+            driver: {
+              id: mockDriverId,
+              name: 'Driver',
+              phone: '+92300',
+              rating: 4.5,
+              currentLat: 0,
+              currentLng: 0.02,
+              vehicle: { type: 'car', make: 'Suzuki', model: 'Cultus', color: 'white', registrationNumber: 'LEA-1' },
+            },
+            offers: [],
+          },
+        ],
+      });
+      const res: any = await service.getNegotiationsForRide(mockRideId, { sub: mockPassengerId, role: 'passenger' } as any);
+
+      const select = prisma.ride.findUnique.mock.calls[0][0].include.negotiations.include.driver.select;
+      expect(select.vehicle).toEqual({
+        select: { type: true, make: true, model: true, color: true, registrationNumber: true },
+      });
+      expect(res[0].driver).not.toHaveProperty('currentLat');
+      expect(res[0].driver).not.toHaveProperty('currentLng');
+      expect(res[0].etaMinutes).toBeGreaterThanOrEqual(1);
+      expect(res[0].driverDistanceKm).toBeGreaterThan(0);
+    });
+
+    it('omits ETA when the driver has no known position', async () => {
+      prisma.ride.findUnique.mockResolvedValue({
+        id: mockRideId,
+        passengerId: mockPassengerId,
+        pickupLat: 0,
+        pickupLng: 0,
+        negotiations: [
+          { id: mockNegotiationId, driverId: mockDriverId, driver: { id: mockDriverId, currentLat: null, currentLng: null, vehicle: null }, offers: [] },
+        ],
+      });
+      const res: any = await service.getNegotiationsForRide(mockRideId, { sub: mockPassengerId, role: 'passenger' } as any);
+      expect(res[0].etaMinutes).toBeNull();
     });
   });
 

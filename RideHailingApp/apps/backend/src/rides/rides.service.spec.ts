@@ -502,6 +502,37 @@ describe('RidesService & RidesController (Phase 10 Comprehensive)', () => {
       expect(prisma.ride.update).not.toHaveBeenCalled();
     });
 
+    it('a driver mid-negotiation cannot lock the ride in at the stale proposedFare via any legacy path', async () => {
+      // Passenger asked 350; driver countered 450; passenger countered 400 (negotiation still
+      // active). Ride.proposedFare is still the original 350 -- the stale number.
+      prisma.negotiation.findUnique.mockResolvedValue({
+        id: 'negotiation-id',
+        rideId: mockRideId,
+        driverId: mockDriverId,
+        status: 'active',
+        currentAmount: 400,
+      });
+      prisma.ride.findUnique.mockResolvedValue({
+        id: mockRideId,
+        status: 'offered',
+        proposedFare: 350,
+        driverId: null,
+      });
+      prisma.driver.findUnique.mockResolvedValue({ id: mockDriverId, verificationStatus: 'approved' });
+
+      await expect(
+        ridesService.updateRideStatus(
+          mockRideId,
+          { sub: mockDriverId, role: 'driver' } as any,
+          { status: UpdateRideStatusEnum.accepted },
+        ),
+      ).rejects.toThrow(/negotiation\/accept/);
+
+      // Direct-accept writes finalFare through ride.updateMany; it must never have run.
+      expect(prisma.ride.updateMany).not.toHaveBeenCalled();
+      expect(prisma.ride.update).not.toHaveBeenCalled();
+    });
+
     it('updateRideStatus driver direct-accept throws ConflictException instead of applying proposedFare', async () => {
       prisma.ride.findUnique.mockResolvedValue({
         id: mockRideId,
