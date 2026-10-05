@@ -1,4 +1,5 @@
 import { apiClient } from "@/lib/api-client";
+import type { FareTier, VehicleBodyType } from "@/lib/api/fare";
 
 export interface CreateRideRequest {
   pickupLat: number;
@@ -10,7 +11,9 @@ export interface CreateRideRequest {
   distanceKm: number;
   etaMinutes: number;
   proposedFare: number;
-  aiRecommendedFare?: number;
+  fareTier: FareTier;
+  vehicleType?: VehicleBodyType;
+  paymentMethod: "cash" | "wallet" | "card";
 }
 
 export interface PassengerRideResponse {

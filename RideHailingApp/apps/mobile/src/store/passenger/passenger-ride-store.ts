@@ -1,5 +1,7 @@
 import { create } from "zustand";
 
+import type { FareQuote, FareTier } from "@/lib/api/fare";
+
 export interface PassengerLocationPoint {
   latitude: number;
   longitude: number;
@@ -41,7 +43,10 @@ export interface PassengerRideState {
   proposedFare: number | null;
   estimatedDistanceKm: number | null;
   estimatedDurationMinutes: number | null;
-  selectedRideType: string;
+  selectedRideType: FareTier;
+  // Server quotes for the current route, one per tier (see lib/api/fare.ts). The only source of
+  // fare numbers on the client; cleared whenever the draft resets.
+  fareQuotes: Partial<Record<FareTier, FareQuote>>;
   currentRideId: string | null;
   createdRideId: string | null;
   rideStatus: PassengerRideStatus;
@@ -60,7 +65,8 @@ export interface PassengerRideState {
     coords: { latitude: number; longitude: number }[],
   ) => void;
   setProposedFare: (fare: number | null) => void;
-  setSelectedRideType: (type: string) => void;
+  setSelectedRideType: (type: FareTier) => void;
+  setFareQuotes: (quotes: Partial<Record<FareTier, FareQuote>>) => void;
   setRideStatus: (status: PassengerRideStatus) => void;
   setPaymentMethod: (method: "cash" | "wallet" | "card") => void;
   setCurrentRideId: (rideId: string | null) => void;
@@ -81,7 +87,8 @@ const initialRideState = {
   proposedFare: null,
   estimatedDistanceKm: null,
   estimatedDurationMinutes: null,
-  selectedRideType: "standard",
+  selectedRideType: "standard" as FareTier,
+  fareQuotes: {} as Partial<Record<FareTier, FareQuote>>,
   currentRideId: null,
   createdRideId: null,
   rideStatus: "idle" as PassengerRideStatus,
@@ -106,6 +113,7 @@ export const usePassengerRideStore = create<PassengerRideState>((set) => ({
     }),
   setProposedFare: (proposedFare) => set({ proposedFare }),
   setSelectedRideType: (selectedRideType) => set({ selectedRideType }),
+  setFareQuotes: (fareQuotes) => set({ fareQuotes }),
   setRideStatus: (rideStatus) => set({ rideStatus }),
   setPaymentMethod: (paymentMethod) => set({ paymentMethod }),
   setCurrentRideId: (currentRideId) =>
@@ -125,6 +133,7 @@ export const usePassengerRideStore = create<PassengerRideState>((set) => ({
       estimatedDistanceKm: null,
       estimatedDurationMinutes: null,
       selectedRideType: "standard",
+      fareQuotes: {},
       isCreatingRide: false,
       createRideError: null,
       offers: [],
