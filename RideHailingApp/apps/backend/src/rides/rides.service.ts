@@ -12,6 +12,8 @@ import { CreateRideDto } from './dto/create-ride.dto';
 import { CreateOfferDto, OfferTypeEnum } from './dto/create-offer.dto';
 import { UpdateRideStatusDto, UpdateRideStatusEnum } from './dto/update-ride-status.dto';
 
+import { FareQuoteService } from '../negotiation/fare-quote.service';
+import { SUPPORTED_RIDE_PAYMENT_METHODS } from '../negotiation/fare-config';
 import { MatchingService, calculateHaversineDistanceKm } from './matching.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -25,6 +27,7 @@ export class RidesService {
     private readonly matchingService: MatchingService,
     private readonly realtimeService: RealtimeService,
     private readonly notificationsService: NotificationsService,
+    private readonly fareQuoteService: FareQuoteService,
   ) {}
 
   // Guards every legacy accept path (acceptOffer, driverAcceptOffer, and
@@ -79,7 +82,26 @@ export class RidesService {
       throw new NotFoundException('Passenger account not found');
     }
 
-    const aiRecommendedFare = dto.aiRecommendedFare ?? dto.proposedFare;
+    const paymentMethod = dto.paymentMethod ?? 'cash';
+    if (!SUPPORTED_RIDE_PAYMENT_METHODS.includes(paymentMethod)) {
+      throw new BadRequestException(
+        `Payment method '${paymentMethod}' is not supported yet. Supported: ${SUPPORTED_RIDE_PAYMENT_METHODS.join(', ')}`,
+      );
+    }
+
+    // Server-authoritative fare bounds: recomputed here from the request, never trusted from the
+    // client. The passenger app fetches the same quote from POST /fare/quote.
+    const quote = this.fareQuoteService.quote(dto);
+    if (dto.proposedFare < quote.minimumFare) {
+      throw new BadRequestException(
+        `Proposed fare PKR ${dto.proposedFare} is below the minimum allowed fare of PKR ${quote.minimumFare} for this trip`,
+      );
+    }
+    if (dto.proposedFare > quote.maximumFare) {
+      throw new BadRequestException(
+        `Proposed fare PKR ${dto.proposedFare} is above the maximum allowed fare of PKR ${quote.maximumFare} for this trip`,
+      );
+    }
 
     const ride = await this.prisma.ride.create({
       data: {
@@ -93,7 +115,11 @@ export class RidesService {
         distanceKm: dto.distanceKm,
         etaMinutes: dto.etaMinutes,
         proposedFare: dto.proposedFare,
-        aiRecommendedFare,
+        // Server's own recommendation (deterministic formula), not a client-supplied value.
+        aiRecommendedFare: quote.recommendedFare,
+        fareTier: quote.fareTier,
+        vehicleType: quote.vehicleType,
+        paymentMethod,
         status: 'requested',
       },
       include: {

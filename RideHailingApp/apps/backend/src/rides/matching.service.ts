@@ -67,6 +67,7 @@ export class MatchingService {
     radiusKm: number = INITIAL_MATCH_RADIUS_KM,
     limit: number = MAX_MATCH_DRIVERS,
     excludeDriverIds: string[] = [],
+    vehicleType?: 'car' | 'bike' | 'rickshaw' | null,
   ): Promise<MatchedDriver[]> {
     // 1. Query drivers matching eligibility constraints
     const drivers = await this.prisma.driver.findMany({
@@ -76,6 +77,9 @@ export class MatchingService {
         currentLat: { not: null },
         currentLng: { not: null },
         id: excludeDriverIds.length > 0 ? { notIn: excludeDriverIds } : undefined,
+        // Only drivers whose registered vehicle body type matches the ride's. Rides created before
+        // vehicleType existed have none, and match any body type as before.
+        vehicle: vehicleType ? { is: { type: vehicleType } } : undefined,
         // Exclude drivers occupied with an active ride
         rides: {
           none: {
@@ -168,6 +172,7 @@ export class MatchingService {
       INITIAL_MATCH_RADIUS_KM,
       MAX_MATCH_DRIVERS,
       alreadyOfferedDriverIds,
+      ride.vehicleType,
     );
 
     if (matchedDrivers.length === 0) {

@@ -9,6 +9,9 @@ import { UpdateRideStatusEnum } from './dto/update-ride-status.dto';
 import { MatchingService } from './matching.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { FareQuoteService } from '../negotiation/fare-quote.service';
+import { AiNegotiationProvider } from '../negotiation/ai-negotiation.provider';
+import { FareTierEnum } from '../negotiation/dto/fare-quote.dto';
 
 describe('RidesService & RidesController (Phase 10 Comprehensive)', () => {
   let ridesService: RidesService;
@@ -34,7 +37,9 @@ describe('RidesService & RidesController (Phase 10 Comprehensive)', () => {
     dropoffAddress: 'Fisherman Wharf',
     distanceKm: 5.2,
     etaMinutes: 15,
-    proposedFare: 20.0,
+    // standard tier, 5.2 km: server quote is min 250 / recommended 350 / max 700 (placeholder rates)
+    proposedFare: 350,
+    fareTier: FareTierEnum.standard,
   };
 
   beforeEach(async () => {
@@ -111,6 +116,10 @@ describe('RidesService & RidesController (Phase 10 Comprehensive)', () => {
           provide: NotificationsService,
           useValue: notificationsService,
         },
+        // Real (deterministic, dependency-free) quote engine, so these tests exercise the actual
+        // server-side fare validation rather than a mock of it.
+        FareQuoteService,
+        AiNegotiationProvider,
       ],
     }).compile();
 
@@ -136,12 +145,66 @@ describe('RidesService & RidesController (Phase 10 Comprehensive)', () => {
           data: expect.objectContaining({
             passengerId: mockPassengerId,
             status: 'requested',
-            proposedFare: 20.0,
+            proposedFare: 350,
+            fareTier: 'standard',
+            vehicleType: 'car',
+            paymentMethod: 'cash',
+            aiRecommendedFare: 350,
           }),
         }),
       );
       expect(result.id).toBe(mockRideId);
       expect(result.status).toBe('requested');
+    });
+
+    it('rejects a proposed fare below the server-computed minimum', async () => {
+      prisma.user.findUnique.mockResolvedValue({ id: mockPassengerId, name: 'Alice' });
+
+      await expect(
+        ridesService.createRide(mockPassengerId, { ...sampleRideDto, proposedFare: 200 }),
+      ).rejects.toThrow(/below the minimum allowed fare of PKR 250/);
+      expect(prisma.ride.create).not.toHaveBeenCalled();
+    });
+
+    it('rejects a proposed fare above the server-computed maximum', async () => {
+      prisma.user.findUnique.mockResolvedValue({ id: mockPassengerId, name: 'Alice' });
+
+      await expect(
+        ridesService.createRide(mockPassengerId, { ...sampleRideDto, proposedFare: 750 }),
+      ).rejects.toThrow(/above the maximum allowed fare of PKR 700/);
+      expect(prisma.ride.create).not.toHaveBeenCalled();
+    });
+
+    it('does not let a client shrink the price floor by under-reporting distance', async () => {
+      prisma.user.findUnique.mockResolvedValue({ id: mockPassengerId, name: 'Alice' });
+      // Straight line between the sample coordinates is ~3.8 km; claim 0.1 km to get a tiny floor.
+      await expect(
+        ridesService.createRide(mockPassengerId, { ...sampleRideDto, distanceKm: 0.1, proposedFare: 100 }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('persists paymentMethod, fareTier and vehicleType, and records the server recommendation', async () => {
+      prisma.user.findUnique.mockResolvedValue({ id: mockPassengerId, name: 'Alice' });
+      prisma.ride.create.mockResolvedValue({ id: mockRideId, status: 'requested' });
+
+      await ridesService.createRide(mockPassengerId, {
+        ...sampleRideDto,
+        fareTier: FareTierEnum.bike,
+        paymentMethod: 'cash' as any,
+        proposedFare: 200,
+      });
+
+      const data = prisma.ride.create.mock.calls[0][0].data;
+      expect(data.paymentMethod).toBe('cash');
+      expect(data.fareTier).toBe('bike');
+      expect(data.vehicleType).toBe('bike');
+    });
+
+    it('rejects payment methods that are not supported yet (cash-only MVP)', async () => {
+      prisma.user.findUnique.mockResolvedValue({ id: mockPassengerId, name: 'Alice' });
+      await expect(
+        ridesService.createRide(mockPassengerId, { ...sampleRideDto, paymentMethod: 'card' as any }),
+      ).rejects.toThrow(/not supported yet/);
     });
 
     it('throws ForbiddenException if a driver attempts to create a ride', () => {

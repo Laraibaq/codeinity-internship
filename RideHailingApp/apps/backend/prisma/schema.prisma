@@ -199,6 +199,9 @@ model Ride {
   // Pricing/comfort tier the passenger picked (standard/premium/xl/bike); see the enum comment
   // above. Nullable for the same reason as vehicleType.
   fareTier          RideFareTier?
+  // How the passenger intends to pay. MVP policy is cash-only (enforced in RidesService.createRide),
+  // but the value is recorded on every ride so it is never implied.
+  paymentMethod     PaymentMethod @default(cash)
   status            RideStatus @default(requested)
   requestedAt       DateTime   @default(now())
   startedAt         DateTime?
