@@ -48,6 +48,8 @@ import {
   reverseGeocodeLocation,
 } from "@/lib/location/location-service";
 import { usePassengerRideStore } from "@/store/passenger/passenger-ride-store";
+import { nearbyDriversApi, type NearbyDriver } from "@/lib/api/passenger/nearby-drivers";
+import { NearbyDriverMarkers } from "@/components/passenger/nearby-driver-markers";
 import {
   PassengerMap,
   type PassengerMapRef,
@@ -62,6 +64,32 @@ export default function PassengerHomeScreen() {
   const setCurrentLocation = usePassengerRideStore((s) => s.setCurrentLocation);
   const setPickup = usePassengerRideStore((s) => s.setPickup);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
+
+  // Real available drivers around the passenger (coarse positions from GET /drivers/nearby). Drives
+  // both the map markers and the "N drivers nearby" pill; nothing is shown until the data arrives.
+  const [nearbyDrivers, setNearbyDrivers] = useState<NearbyDriver[]>([]);
+  const nearbyCenter = pickup ?? currentLocation;
+  useEffect(() => {
+    if (!nearbyCenter) return;
+    let isMounted = true;
+    const load = async () => {
+      try {
+        const res = await nearbyDriversApi.getNearby({
+          lat: nearbyCenter.latitude,
+          lng: nearbyCenter.longitude,
+        });
+        if (isMounted) setNearbyDrivers(res.drivers);
+      } catch {
+        if (isMounted) setNearbyDrivers([]);
+      }
+    };
+    load();
+    const t = setInterval(load, 15000);
+    return () => {
+      isMounted = false;
+      clearInterval(t);
+    };
+  }, [nearbyCenter?.latitude, nearbyCenter?.longitude]);
 
   // Check location permission on mount and acquire real GPS fix
   const hasInitialized = React.useRef(false);
@@ -167,7 +195,9 @@ export default function PassengerHomeScreen() {
               }
             : undefined
         }
-      />
+      >
+        <NearbyDriverMarkers drivers={nearbyDrivers} />
+      </PassengerMap>
 
       {/* Top Header (absolute) */}
       <View style={styles.header}>
@@ -198,15 +228,16 @@ export default function PassengerHomeScreen() {
         </View>
       </Pressable>
 
-      {/* Nearby Vehicle Chip */}
-      <View style={styles.nearbyVehicle}>
-        <View style={styles.etaChip}>
-          <Text style={styles.etaText}>3 min</Text>
+      {/* Nearby drivers pill: real count from /drivers/nearby; hidden when none/unknown. */}
+      {nearbyDrivers.length > 0 ? (
+        <View style={styles.nearbyVehicle} pointerEvents="none">
+          <View style={styles.etaChip}>
+            <Text style={styles.etaText}>
+              {nearbyDrivers.length} {nearbyDrivers.length === 1 ? "driver" : "drivers"} nearby
+            </Text>
+          </View>
         </View>
-        <View style={styles.carIconCircle}>
-          <MaterialIcons name="directions-car" size={20} color={themeColors.primary} />
-        </View>
-      </View>
+      ) : null}
 
       {/* My Location FAB */}
       <Pressable
@@ -483,8 +514,9 @@ const styles = StyleSheet.create({
   // ── Nearby Vehicle ──
   nearbyVehicle: {
     position: "absolute",
-    top: "38%",
-    left: "62%",
+    top: "30%",
+    left: 0,
+    right: 0,
     zIndex: 10,
     alignItems: "center",
     gap: 4,
