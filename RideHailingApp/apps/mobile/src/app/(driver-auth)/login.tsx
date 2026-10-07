@@ -94,18 +94,17 @@ export default function DriverLoginScreen() {
       await useAuthStore.getState().login(data);
 
       // A driver account can exist and log in before their documents are reviewed -- only an
-      // `approved` driver goes straight to the dashboard now. `pending`/`rejected` land back on
+      // `approved` driver goes straight to the dashboard. `pending`/`rejected` land on
       // verification-status.tsx (the same screen the registration flow's last step pushes),
       // showing that account's actual status instead of assuming every login means "cleared to
-      // drive".
-      if (data.role === "driver" && data.verificationStatus !== "approved") {
-        router.replace({
-          pathname: "/(driver)/verification-status",
-          params: { status: data.verificationStatus ?? "pending" },
-        });
-        return;
+      // drive". This used to be an unconditional `router.replace(".../dashboard")` regardless of
+      // verificationStatus -- a comment above claimed it already branched on status, but the code
+      // didn't; it was a dev shortcut, now removed.
+      if (data.verificationStatus === "approved") {
+        router.replace("/(driver)/(drawer)/(tabs)/dashboard");
+      } else {
+        router.replace("/(driver)/verification-status" as any);
       }
-      router.replace("/(driver)/(drawer)/(tabs)/dashboard");
     } catch (error) {
       setLoginError(getApiErrorMessage(error, "Couldn't log you in. Please try again."));
     } finally {

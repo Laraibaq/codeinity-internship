@@ -1,5 +1,14 @@
 import { Type } from 'class-transformer';
+import { FareTierEnum, VehicleBodyTypeEnum } from '../../negotiation/dto/fare-quote.dto';
+
+export enum PaymentMethodEnum {
+  cash = 'cash',
+  wallet = 'wallet',
+  card = 'card',
+}
+
 import {
+  IsEnum,
   IsNotEmpty,
   IsNumber,
   IsOptional,
@@ -48,9 +57,16 @@ export class CreateRideDto {
   @IsPositive()
   proposedFare: number;
 
-  @Type(() => Number)
-  @IsNumber()
-  @IsPositive()
+  // Pricing tier the passenger picked; the server prices and validates proposedFare against it.
+  @IsEnum(FareTierEnum)
+  fareTier: FareTierEnum;
+
+  // Driver body type to match against. Optional: defaults to the tier's primary body type.
   @IsOptional()
-  aiRecommendedFare?: number;
+  @IsEnum(VehicleBodyTypeEnum)
+  vehicleType?: VehicleBodyTypeEnum;
+
+  @IsOptional()
+  @IsEnum(PaymentMethodEnum)
+  paymentMethod?: PaymentMethodEnum;
 }

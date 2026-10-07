@@ -18,6 +18,7 @@ import Animated, {
 import { useRouter } from "expo-router";
 import { MaterialIcons } from "@expo/vector-icons";
 import { themeColors } from "@/constants/theme-colors";
+import { PAKISTAN_CENTER } from "@/constants/default-region";
 
 const MAP_URI =
   "https://lh3.googleusercontent.com/aida-public/AB6AXuDtr3B9I8-JbBrIiai9YP2XPakd512iQGL1szQVVfRHzflX5UuI3muzQojH0Au08bpcg2qGRgikGbJ120cgY52u-mKRcf_ImqNcjRPvYIrnt8PQt-zdZAIqVKg8JbJz6KaZf471IOHQiKHeF1jTdaaBInmy0AMTBj1r_vEC3x8jaesKHdoovqB7irXvDoxPnKNZbQ_eswDFXYtt3FU_D8klgfBKpelONSEuWbku-d4d-StOvjqIdX2q";
@@ -45,8 +46,8 @@ export default function PassengerPickupSelectScreen() {
   const setPickup = usePassengerRideStore((s) => s.setPickup);
   const setCurrentLocation = usePassengerRideStore((s) => s.setCurrentLocation);
 
-  const initialLat = existingPickup?.latitude ?? currentLocation?.latitude ?? 37.7749;
-  const initialLon = existingPickup?.longitude ?? currentLocation?.longitude ?? -122.4194;
+  const initialLat = existingPickup?.latitude ?? currentLocation?.latitude ?? PAKISTAN_CENTER.latitude;
+  const initialLon = existingPickup?.longitude ?? currentLocation?.longitude ?? PAKISTAN_CENTER.longitude;
 
   const [selectedCoord, setSelectedCoord] = useState({
     latitude: initialLat,
@@ -282,7 +283,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   mapBg: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   // ── Floating Header ──
   floatingHeader: {

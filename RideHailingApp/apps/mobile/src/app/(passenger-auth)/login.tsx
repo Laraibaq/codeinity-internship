@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -12,7 +12,9 @@ import {
 } from "react-native";
 import { ActivityIndicator } from "react-native";
 import { useRouter } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialIcons } from "@expo/vector-icons";
+import * as SecureStore from "expo-secure-store";
 import { themeColors } from "@/constants/theme-colors";
 import { passengerAuthApi } from "@/lib/api/passenger/auth";
 import { useAuthStore } from "@/store/auth-store";
@@ -23,8 +25,17 @@ const ERROR_COLOR = "#ba1a1a";
 const ERROR_CONTAINER = "#ffdad6";
 const ON_ERROR_CONTAINER = "#93000a";
 
+// "Remember me" only remembers the identifier field (phone/email) for next launch -- it does not
+// change token lifetime or storage. The app already keeps you signed in across restarts via the
+// refresh token api-client.ts stores in SecureStore regardless of this toggle; what this actually
+// saves the user is retyping their phone number on a device they trust, on their next *deliberate*
+// login (e.g. after a manual sign-out). Stored in SecureStore, same as the auth tokens, rather than
+// a less-protected store, since a phone number is still identifying information.
+const REMEMBERED_IDENTIFIER_KEY = "passengerRememberedIdentifier";
+
 export default function PassengerLoginScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -33,6 +44,17 @@ export default function PassengerLoginScreen() {
   const [hasError, setHasError] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [rememberMe, setRememberMe] = useState(true);
+
+  useEffect(() => {
+    SecureStore.getItemAsync(REMEMBERED_IDENTIFIER_KEY)
+      .then((saved) => {
+        if (saved) setPhone(saved);
+      })
+      .catch(() => {
+        // No stored value, or SecureStore unavailable on this device -- just start with an empty field.
+      });
+  }, []);
 
   const handleLogin = async () => {
     setHasError(false);
@@ -63,6 +85,12 @@ export default function PassengerLoginScreen() {
         return;
       }
 
+      if (rememberMe) {
+        await SecureStore.setItemAsync(REMEMBERED_IDENTIFIER_KEY, raw).catch(() => undefined);
+      } else {
+        await SecureStore.deleteItemAsync(REMEMBERED_IDENTIFIER_KEY).catch(() => undefined);
+      }
+
       await useAuthStore.getState().login(data);
       router.replace("/(passenger)/home");
     } catch (error) {
@@ -91,10 +119,21 @@ export default function PassengerLoginScreen() {
       <View style={styles.radialBg} />
 
       {/* Top header */}
-      <View style={styles.topBar}>
+      <View
+        style={[
+          styles.topBar,
+          {
+            paddingTop: Math.max(insets.top + 8, 20),
+            height: Math.max(insets.top + 56, 64),
+          },
+        ]}
+      >
         <Pressable
           onPress={() => router.back()}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
           style={({ pressed }) => [styles.backBtn, pressed && styles.pressed]}
+          accessibilityRole="button"
+          accessibilityLabel="Back"
         >
           <MaterialIcons name="arrow-back" size={24} color={themeColors.onSurfaceVariant} />
         </Pressable>
@@ -103,7 +142,10 @@ export default function PassengerLoginScreen() {
       </View>
 
       <ScrollView
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: Math.max(insets.bottom + 24, 40) },
+        ]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
@@ -200,6 +242,22 @@ export default function PassengerLoginScreen() {
             </Pressable>
           </View>
         </View>
+
+        {/* Remember Me */}
+        <Pressable
+          onPress={() => setRememberMe((v) => !v)}
+          style={styles.rememberRow}
+          accessibilityRole="checkbox"
+          accessibilityState={{ checked: rememberMe }}
+          accessibilityLabel="Remember me"
+        >
+          <MaterialIcons
+            name={rememberMe ? "check-box" : "check-box-outline-blank"}
+            size={20}
+            color={rememberMe ? themeColors.primary : themeColors.outline}
+          />
+          <Text style={styles.rememberText}>Remember me</Text>
+        </Pressable>
 
         {/* Continue Button */}
         <Pressable
@@ -343,6 +401,17 @@ const styles = StyleSheet.create({
     letterSpacing: 0.6,
     color: themeColors.primary,
     lineHeight: 16,
+  },
+  rememberRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 4,
+    alignSelf: "flex-start",
+  },
+  rememberText: {
+    fontSize: 14,
+    color: themeColors.onSurfaceVariant,
   },
   inputRow: {
     flexDirection: "row",

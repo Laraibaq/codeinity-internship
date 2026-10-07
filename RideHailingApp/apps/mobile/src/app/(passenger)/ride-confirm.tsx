@@ -15,6 +15,7 @@ import { themeColors } from "@/constants/theme-colors";
 import { usePassengerRideStore } from "@/store/passenger/passenger-ride-store";
 import { passengerRidesApi } from "@/lib/api/passenger/rides";
 import { getApiErrorMessage } from "@/lib/api-client";
+import { formatCurrency } from "@/utils/currency";
 
 const MAP_URI =
   "https://lh3.googleusercontent.com/aida-public/AB6AXuCEACPBGCHIKOhhqW1fmYqLqUkXMDY3tWM0gaE3k9METXUf2_qAnZROH3W_UuXCphVU7jj4S3s_Dp0jIw-XGoD7Z3Cc-PvjRNkNfc6DyIR9WPInvT7imfV-ky1xOtzvoScZTQ5sVbYNNglRJNfnPCcubg1k2UNwStlYEm17n_4DEbXUzEX8s_TyhQFiKO1tmmWvVI1ZjM9e6e6XeriQeNHKSAo61aBBQZS2NjlSUnMne4P5faibxwiJ";
@@ -31,6 +32,7 @@ export default function PassengerRideConfirmScreen() {
     estimatedDurationMinutes,
     selectedRideType,
     proposedFare,
+    fareQuotes,
     isCreatingRide,
     createRideError,
     paymentMethod,
@@ -45,9 +47,9 @@ export default function PassengerRideConfirmScreen() {
 
   const pickupName = pickup?.name || pickup?.address || "Current Location";
   const destName = destination?.name || destination?.address || "Destination";
-  const fare = proposedFare && proposedFare > 0 ? proposedFare : 25.0;
+  const fare = proposedFare && proposedFare > 0 ? proposedFare : 0;
   const eta = estimatedDurationMinutes && estimatedDurationMinutes > 0 ? Math.round(estimatedDurationMinutes) : 12;
-  const distance = estimatedDistanceKm && estimatedDistanceKm > 0 ? estimatedDistanceKm : 5.0;
+  const distance = estimatedDistanceKm && estimatedDistanceKm > 0 ? estimatedDistanceKm : 0;
 
   const vehicleName =
     selectedRideType === "bike"
@@ -75,6 +77,11 @@ export default function PassengerRideConfirmScreen() {
       return;
     }
 
+    if (!estimatedDistanceKm || estimatedDistanceKm <= 0) {
+      setLocalError("Trip distance is unavailable. Go back and re-select your route.");
+      return;
+    }
+
     if (!proposedFare || proposedFare <= 0) {
       setLocalError("Please enter a valid positive proposed fare.");
       return;
@@ -93,6 +100,12 @@ export default function PassengerRideConfirmScreen() {
         distanceKm: Number(distance.toFixed(2)),
         etaMinutes: Math.max(1, eta),
         proposedFare: Number(fare.toFixed(2)),
+        fareTier: selectedRideType,
+        // Body type for driver matching comes from the server quote for this tier (the backend owns
+        // the tier -> body-type mapping); cash is the only payment method in the MVP but is still
+        // sent explicitly.
+        vehicleType: fareQuotes[selectedRideType]?.vehicleType,
+        paymentMethod,
       });
 
       if (response && response.id) {
@@ -202,7 +215,7 @@ export default function PassengerRideConfirmScreen() {
                   <Text style={styles.vehicleSeatText}>{seats}</Text>
                 </View>
               </View>
-              <Text style={styles.vehiclePrice}>${fare.toFixed(2)}</Text>
+              <Text style={styles.vehiclePrice}>{formatCurrency(fare)}</Text>
             </View>
           </View>
 
@@ -315,7 +328,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   mapBg: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   // ── Markers ──
   destinationMarker: {

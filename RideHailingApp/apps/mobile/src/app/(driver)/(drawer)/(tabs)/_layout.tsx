@@ -1,5 +1,5 @@
 import { MaterialIcons } from "@expo/vector-icons";
-import type { BottomTabBarButtonProps } from "@react-navigation/bottom-tabs";
+import type { BottomTabBarButtonProps } from "expo-router/tabs";
 import { Tabs } from "expo-router";
 import { Pressable } from "react-native";
 
@@ -58,7 +58,7 @@ export default function DriverTabsLayout() {
           shadowRadius: 12,
           elevation: 8,
         },
-        tabBarButton: (props) => <TabBarButton {...props} />,
+        tabBarButton: (props) => <TabBarButton {...(props as any)} />,
       }}
     >
       <Tabs.Screen

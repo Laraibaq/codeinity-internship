@@ -1,76 +1,40 @@
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   View,
   Text,
-  Image,
   Pressable,
   ScrollView,
   StyleSheet,
   StatusBar,
   Dimensions,
+  ActivityIndicator,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { MaterialIcons } from "@expo/vector-icons";
 import { themeColors } from "@/constants/theme-colors";
-
-const MAP_URI =
-  "https://lh3.googleusercontent.com/aida-public/AB6AXuBIrPXW3NEDrb-V426l7_W0vAptuy3Kjmk4sDi4RBNKDr1UcgZDkaoNJH627P3IyTvzYptM9PcyLq0OrDkr3jgslAEQjaCWXvet0S4q5-CB-rrSc6xNxxi6kkjFEYlv1P9KMoNyrtcJUlPlPYCyy_X1EfXxQK2DCW2BevNvn_f57Si0Cup8yneKQ_y20S_j0ZZARR-wQd_4RIHmzOmyXi1RS-L5RF4rT2ChlFm-wIrDB1-3WNYfCQGT";
-
-const AVATAR_URI =
-  "https://lh3.googleusercontent.com/aida-public/AB6AXuAwNbTtRWyysdMspLZq9DRcGyktGwIUVSg33rUj_zTUhiuwiXJlX6utJhNlp_y1uTbPZXZi6JqB1EsK1jGOY5qQsxkH_aUCvi0hAVb4uvw-QqkKi5xSgt7TH8wqs1h8oclVx36Nxly4voEeEGLCx138DbnF-CHRqwxTr7wIhgVycQfoZPVdGWz9L_SkvNsysBqEm8VyxoJ3WJM7HQHMhtPIC3xAnfKBe9Qs9UlWfNw0PwYWLZUemazY";
+import { usePassengerRideStore } from "@/store/passenger/passenger-ride-store";
+import { fareApi, type FareQuote, type FareTier } from "@/lib/api/fare";
+import { getApiErrorMessage } from "@/lib/api-client";
+import { formatCurrency } from "@/utils/currency";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const CARD_WIDTH = Math.min(280, SCREEN_WIDTH - 60);
 const CARD_GAP = 16;
 
-const RIDE_TYPES = [
-  {
-    id: "standard",
-    name: "Standard",
-    eta: "3 mins away",
-    price: "$32.50",
-    strikePrice: "$38.00",
-    seats: 4,
-    badge: "Fastest",
-    imageUri:
-      "https://lh3.googleusercontent.com/aida-public/AB6AXuC-rjpzNhR8F7suM5WaSXbnfI-u_lebF7KKhEWN3O8uNL4be_1uvBquAhyXRAc0DYIiOoWVglYKFyxHq25zSqpnlC38SD4OIVWVZsgoKu4OigKVZ6NtDqAQ7kxW6k1CQdlOpE5YYiPjiQsIWtA0qmK_WxdJw3a5gHvuqHbATB2jqymeT5ljjCmrs_CkBWvMdz52VBuXu4FZ1qnaFNJRBHrFbcYOLwdN-g9b2eBpv3XAyeG4tO3F6MGd",
-  },
-  {
-    id: "premium",
-    name: "Premium",
-    eta: "7 mins away",
-    price: "$54.20",
-    strikePrice: null,
-    seats: 4,
-    badge: null,
-    imageUri:
-      "https://lh3.googleusercontent.com/aida-public/AB6AXuCVuFuNBIs5Q1rl3c1DscpZb68YnrshU1sHH-KGwYvNwCm8dw4L_QaNi5Uhnyp3epbOjAyV3vDzsyW2TKs8zwnNGqO0VO637btGklmG0mdCQjpp5AEDEvvKFbZRiEATX05_yk_MldD8yhy2ZZXbCX4NZYqfziUjSWoENW2GHGv2SzyDHkhH0xlXJY91yG7hXSiXPeP5Yf3uOonD4mJFS6EeOr--QkBE3RSxeA7gphrKPh4y6VqdrO3Y",
-  },
-  {
-    id: "xl",
-    name: "XL",
-    eta: "5 mins away",
-    price: "$68.90",
-    strikePrice: null,
-    seats: 6,
-    badge: null,
-    imageUri:
-      "https://lh3.googleusercontent.com/aida-public/AB6AXuBeJB9ix1AIlHzb98MXpXgaIdfxfaojTv03EJF_Tyb-XXoahvDRBVttTyBqTKAONmlKhcgbfq7z7aIDYZxioubHWcrgZZ0zMyXFezIwh1W5p5zrSB9uX6Y4KvzSluIpOCBxcqRCaRge-ErVWDHH5OiWU2eyAwHIxQXt7qI1Mi98xZ8fJvrLn8PAGnf02BNNAf4fyrSF9bAKHld88XJzvV2qPoo43ZLzqHI4WotX-_JAC6RAF1UFAB7M",
-  },
-  {
-    id: "bike",
-    name: "Bike",
-    eta: "1 min away",
-    price: "$12.00",
-    strikePrice: null,
-    seats: 1,
-    badge: null,
-    imageUri:
-      "https://lh3.googleusercontent.com/aida-public/AB6AXuC5KSlpeiEvnrjJE3MTAtGaDYjWVx4EqUJARGl7mPH1Q1iFC3tWJ6qI3sNpim1NV--yqqwTtIcRnn2F9Y9_RzClqO8tjoUG8mUczOinW7yGgXbhK-kDMsE9hBC-alTnnWuhfmECm3_qRLH-szJtqw7g-tn4jMA5snQAL4DN0-tfPnp3WxWNZBgK0B9a5ColvCaeOnTL9wNDnYLNI2NySJ8_lsx22rwUo256zisq7V_hI5DdICda9Gf4",
-  },
+// Presentation only. These are fare TIERS (pricing/comfort); which vehicle body type serves each
+// is decided by the backend and returned on the quote -- see lib/api/fare.ts. No prices, ETAs or
+// promo badges live here: those numbers must come from the server or not be shown.
+const RIDE_TIERS: {
+  id: FareTier;
+  name: string;
+  seats: number;
+  icon: React.ComponentProps<typeof MaterialIcons>["name"];
+}[] = [
+  { id: "standard", name: "Standard", seats: 4, icon: "directions-car" },
+  { id: "premium", name: "Premium", seats: 4, icon: "local-taxi" },
+  { id: "xl", name: "XL", seats: 6, icon: "airport-shuttle" },
+  { id: "bike", name: "Bike", seats: 1, icon: "two-wheeler" },
 ];
-
-import { usePassengerRideStore } from "@/store/passenger/passenger-ride-store";
 
 export default function PassengerRideSelectScreen() {
   const router = useRouter();
@@ -80,46 +44,67 @@ export default function PassengerRideSelectScreen() {
     estimatedDistanceKm,
     selectedRideType,
     setSelectedRideType,
-    paymentMethod,
-    setPaymentMethod,
+    fareQuotes,
+    setFareQuotes,
   } = usePassengerRideStore();
 
-  const [selectedId, setSelectedId] = useState(selectedRideType || "standard");
+  const [selectedId, setSelectedId] = useState<FareTier>(selectedRideType || "standard");
+  const [loading, setLoading] = useState(false);
+  const [quoteError, setQuoteError] = useState<string | null>(null);
 
-  const distance = estimatedDistanceKm && estimatedDistanceKm > 0 ? estimatedDistanceKm : 6.5;
+  const hasRoute =
+    !!pickup && !!destination && !!estimatedDistanceKm && estimatedDistanceKm > 0;
 
-  const rideTypes = RIDE_TYPES.map((r) => {
-    let priceNum = 25;
-    if (r.id === "standard") priceNum = Math.round(5 + distance * 2.5);
-    else if (r.id === "bike") priceNum = Math.round(3 + distance * 1.4);
-    else if (r.id === "premium") priceNum = Math.round(8 + distance * 3.8);
-    else if (r.id === "xl") priceNum = Math.round(10 + distance * 4.5);
+  const loadQuotes = useCallback(async () => {
+    if (!pickup || !destination || !estimatedDistanceKm || estimatedDistanceKm <= 0) return;
+    setLoading(true);
+    setQuoteError(null);
+    try {
+      const results = await Promise.all(
+        RIDE_TIERS.map((t) =>
+          fareApi.getQuote({
+            pickupLat: pickup.latitude,
+            pickupLng: pickup.longitude,
+            dropoffLat: destination.latitude,
+            dropoffLng: destination.longitude,
+            distanceKm: Number(estimatedDistanceKm.toFixed(2)),
+            fareTier: t.id,
+          }),
+        ),
+      );
+      const next: Partial<Record<FareTier, FareQuote>> = {};
+      for (const q of results) next[q.fareTier] = q;
+      setFareQuotes(next);
+    } catch (err) {
+      setFareQuotes({});
+      setQuoteError(getApiErrorMessage(err, "Could not load fares. Please try again."));
+    } finally {
+      setLoading(false);
+    }
+  }, [pickup, destination, estimatedDistanceKm, setFareQuotes]);
 
-    return {
-      ...r,
-      price: `$${priceNum.toFixed(2)}`,
-      numericPrice: priceNum,
-    };
-  });
+  useEffect(() => {
+    loadQuotes();
+  }, [loadQuotes]);
 
-  const selectedRide = rideTypes.find((r) => r.id === selectedId) || rideTypes[0];
+  const selectedQuote = fareQuotes[selectedId];
 
   const handleConfirm = () => {
+    if (!selectedQuote) return;
     setSelectedRideType(selectedId);
     router.push("/(passenger)/fare-offer" as any);
   };
 
   const pickupDisplay = pickup?.name || pickup?.address || "Pickup Location";
   const destDisplay = destination?.name || destination?.address || "Destination";
+  const selectedTier = RIDE_TIERS.find((t) => t.id === selectedId) ?? RIDE_TIERS[0];
 
   return (
     <View style={styles.root}>
       <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
 
-      {/* Map background */}
-      <Image source={{ uri: MAP_URI }} style={styles.mapBg} resizeMode="cover" />
-
-      {/* Map markers */}
+      {/* Neutral backdrop (the route map is shown on the route-preview screen) */}
+      <View style={styles.mapBg} />
       <View style={styles.pickupMarker} />
       <View style={styles.destMarker}>
         <MaterialIcons name="location-on" size={28} color={themeColors.onSurface} />
@@ -135,9 +120,7 @@ export default function PassengerRideSelectScreen() {
           <MaterialIcons name="arrow-back" size={24} color={themeColors.onSurfaceVariant} />
         </Pressable>
         <Text style={styles.brand}>Ryde</Text>
-        <Pressable style={styles.avatarBtn}>
-          <Image source={{ uri: AVATAR_URI }} style={styles.avatarImg} resizeMode="cover" />
-        </Pressable>
+        <View style={styles.menuBtn} />
       </View>
 
       {/* Bottom sheet */}
@@ -164,112 +147,107 @@ export default function PassengerRideSelectScreen() {
           </View>
         </View>
 
-        {/* Horizontal ride cards */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          snapToInterval={CARD_WIDTH + CARD_GAP}
-          decelerationRate="fast"
-          contentContainerStyle={styles.cardsContainer}
-          style={styles.cardsScroll}
-        >
-          {rideTypes.map((ride) => {
-            const isSelected = ride.id === selectedId;
-            return (
-              <Pressable
-                key={ride.id}
-                onPress={() => {
-                  setSelectedId(ride.id);
-                  setSelectedRideType(ride.id);
-                }}
-                style={[
-                  styles.rideCard,
-                  { width: CARD_WIDTH },
-                  isSelected && styles.rideCardSelected,
-                  !isSelected && styles.rideCardUnselected,
-                ]}
-              >
-                {/* Badge */}
-                {ride.badge && (
-                  <View style={styles.cardBadge}>
-                    <Text style={styles.cardBadgeText}>{ride.badge}</Text>
+        {!hasRoute ? (
+          <View style={styles.statusBlock}>
+            <Text style={styles.statusText}>
+              No route yet. Go back and pick a pickup and destination to see fares.
+            </Text>
+          </View>
+        ) : loading ? (
+          <View style={styles.statusBlock}>
+            <ActivityIndicator color={themeColors.primary} />
+            <Text style={styles.statusText}>Getting fares…</Text>
+          </View>
+        ) : quoteError ? (
+          <View style={styles.statusBlock}>
+            <Text style={styles.statusText}>{quoteError}</Text>
+            <Pressable onPress={loadQuotes} accessibilityRole="button" style={styles.retryBtn}>
+              <Text style={styles.retryText}>Retry</Text>
+            </Pressable>
+          </View>
+        ) : (
+          /* Horizontal ride cards */
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            snapToInterval={CARD_WIDTH + CARD_GAP}
+            decelerationRate="fast"
+            contentContainerStyle={styles.cardsContainer}
+            style={styles.cardsScroll}
+          >
+            {RIDE_TIERS.map((ride) => {
+              const quote = fareQuotes[ride.id];
+              if (!quote) return null;
+              const isSelected = ride.id === selectedId;
+              return (
+                <Pressable
+                  key={ride.id}
+                  onPress={() => {
+                    setSelectedId(ride.id);
+                    setSelectedRideType(ride.id);
+                  }}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: isSelected }}
+                  style={[
+                    styles.rideCard,
+                    { width: CARD_WIDTH },
+                    isSelected && styles.rideCardSelected,
+                    !isSelected && styles.rideCardUnselected,
+                  ]}
+                >
+                  <View style={styles.cardTopRow}>
+                    <View style={styles.tierIcon}>
+                      <MaterialIcons name={ride.icon} size={36} color={themeColors.primary} />
+                    </View>
+                    <View style={styles.priceBlock}>
+                      <Text style={styles.priceText}>{formatCurrency(quote.recommendedFare)}</Text>
+                      <Text style={styles.rideEta}>Suggested fare</Text>
+                    </View>
                   </View>
-                )}
 
-                {/* Car image + price */}
-                <View style={styles.cardTopRow}>
-                  <Image
-                    source={{ uri: ride.imageUri }}
-                    style={styles.carImg}
-                    resizeMode="contain"
-                  />
-                  <View style={styles.priceBlock}>
-                    <Text style={styles.priceText}>{ride.price}</Text>
-                    {ride.strikePrice && (
-                      <Text style={styles.strikePrice}>{ride.strikePrice}</Text>
-                    )}
-                  </View>
-                </View>
-
-                {/* Name + seats */}
-                <View style={styles.cardBottomRow}>
-                  <View>
+                  <View style={styles.cardBottomRow}>
                     <Text style={styles.rideName}>{ride.name}</Text>
-                    <Text style={styles.rideEta}>{ride.eta}</Text>
+                    <View style={styles.seatChip}>
+                      <MaterialIcons name="person" size={14} color={themeColors.onSurfaceVariant} />
+                      <Text style={styles.seatCount}>{ride.seats}</Text>
+                    </View>
                   </View>
-                  <View style={styles.seatChip}>
-                    <MaterialIcons name="person" size={14} color={themeColors.onSurfaceVariant} />
-                    <Text style={styles.seatCount}>{ride.seats}</Text>
-                  </View>
-                </View>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        )}
 
         {/* Payment + CTA */}
         <View style={styles.actionArea}>
-          {/* Payment selector */}
-          <Pressable
-            style={styles.paymentRow}
-            onPress={() => {
-              const nextMethod =
-                paymentMethod === "cash" ? "wallet" : paymentMethod === "wallet" ? "card" : "cash";
-              setPaymentMethod(nextMethod);
-            }}
-          >
+          {/* Payment indicator (MVP1 policy: cash only, PKR). The method is still sent with the
+              ride request -- see ride-confirm.tsx. */}
+          <View style={styles.paymentRow}>
             <View style={styles.paymentCardIcon}>
               <MaterialIcons
-                name={
-                  paymentMethod === "cash"
-                    ? "attach-money"
-                    : paymentMethod === "wallet"
-                    ? "account-balance-wallet"
-                    : "credit-card"
-                }
+                name="payments"
                 size={18}
                 color={themeColors.primary}
               />
             </View>
             <View style={styles.paymentTextBlock}>
-              <Text style={styles.paymentName}>
-                {paymentMethod === "cash"
-                  ? "Cash Payment"
-                  : paymentMethod === "wallet"
-                  ? "In-App Wallet"
-                  : "Credit / Debit Card"}
-              </Text>
-              <Text style={styles.paymentSwitch}>Switch</Text>
+              <Text style={styles.paymentName}>Cash Payment (PKR)</Text>
+              <Text style={styles.paymentSwitch}>Pay driver directly</Text>
             </View>
-            <MaterialIcons name="chevron-right" size={24} color={themeColors.onSurfaceVariant} />
-          </Pressable>
+            <MaterialIcons name="check-circle" size={20} color="#059669" />
+          </View>
 
           {/* Confirm button */}
           <Pressable
             onPress={handleConfirm}
-            style={({ pressed }) => [styles.btnConfirm, pressed && styles.pressed]}
+            disabled={!selectedQuote}
+            style={({ pressed }) => [
+              styles.btnConfirm,
+              !selectedQuote && styles.btnDisabled,
+              pressed && styles.pressed,
+            ]}
           >
-            <Text style={styles.btnConfirmText}>Confirm {selectedRide.name}</Text>
+            <Text style={styles.btnConfirmText}>Confirm {selectedTier.name}</Text>
           </Pressable>
         </View>
       </View>
@@ -284,8 +262,8 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   mapBg: {
-    ...StyleSheet.absoluteFillObject,
-    opacity: 0.8,
+    ...StyleSheet.absoluteFill,
+    backgroundColor: themeColors.surfaceContainer,
   },
   // ── Map markers ──
   pickupMarker: {
@@ -498,9 +476,37 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "flex-start",
   },
-  carImg: {
+  tierIcon: {
     width: 96,
     height: 64,
+    alignItems: "flex-start",
+    justifyContent: "center",
+  },
+  statusBlock: {
+    paddingHorizontal: 20,
+    paddingVertical: 28,
+    alignItems: "center",
+    gap: 12,
+  },
+  statusText: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: themeColors.onSurfaceVariant,
+    textAlign: "center",
+  },
+  retryBtn: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: themeColors.primary,
+  },
+  retryText: {
+    color: themeColors.primary,
+    fontWeight: "600",
+  },
+  btnDisabled: {
+    opacity: 0.4,
   },
   priceBlock: {
     alignItems: "flex-end",

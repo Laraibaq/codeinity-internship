@@ -8,6 +8,7 @@ import {
   StatusBar,
 } from "react-native";
 import { useRouter } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialIcons } from "@expo/vector-icons";
 import { themeColors } from "@/constants/theme-colors";
 
@@ -16,21 +17,38 @@ const ILLUSTRATION_URI =
 
 export default function PassengerOnboarding02Screen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
   return (
     <View style={styles.root}>
       <StatusBar barStyle="dark-content" backgroundColor={themeColors.surface} />
 
       {/* Header Actions */}
-      <View style={styles.header}>
+      <View
+        style={[
+          styles.header,
+          {
+            paddingTop: Math.max(insets.top + 8, 20),
+            height: Math.max(insets.top + 56, 64),
+          },
+        ]}
+      >
         <Pressable
           onPress={() => router.back()}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
           style={({ pressed }) => [styles.backBtn, pressed && styles.pressed]}
+          accessibilityRole="button"
           accessibilityLabel="Back"
         >
           <MaterialIcons name="arrow-back" size={24} color={themeColors.onSurfaceVariant} />
         </Pressable>
-        <Pressable onPress={() => router.push("/(passenger-auth)/login")}>
+        <Pressable
+          onPress={() => router.push("/(passenger-auth)/login")}
+          hitSlop={{ top: 12, bottom: 12, left: 16, right: 16 }}
+          style={({ pressed }) => pressed && styles.pressed}
+          accessibilityRole="button"
+          accessibilityLabel="Skip"
+        >
           <Text style={styles.skip}>Skip</Text>
         </Pressable>
       </View>
@@ -70,7 +88,7 @@ export default function PassengerOnboarding02Screen() {
       </View>
 
       {/* Footer */}
-      <View style={styles.footer}>
+      <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom + 16, 32) }]}>
         {/* Progress Dots */}
         <View style={styles.dotsRow}>
           <View style={styles.dot} />
@@ -82,6 +100,9 @@ export default function PassengerOnboarding02Screen() {
         <Pressable
           onPress={() => router.push("/(passenger-auth)/onboarding-03" as any)}
           style={({ pressed }) => [styles.btnNext, pressed && styles.pressed]}
+          accessibilityRole="button"
+          accessibilityLabel="Next"
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         >
           <Text style={styles.btnNextText}>Next</Text>
         </Pressable>
@@ -94,15 +115,14 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: themeColors.surface,
+    justifyContent: "space-between",
   },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 0,
-    height: 64,
+    zIndex: 10,
   },
   backBtn: {
     width: 40,
@@ -112,10 +132,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   skip: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "600",
     letterSpacing: 0.6,
     color: themeColors.primary,
+    paddingVertical: 8,
   },
   pressed: {
     opacity: 0.8,

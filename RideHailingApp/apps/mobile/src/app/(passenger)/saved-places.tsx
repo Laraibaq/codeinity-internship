@@ -1,38 +1,32 @@
-import React from "react";
-import { View, Text, FlatList, Pressable } from "react-native";
+import React, { useCallback, useEffect, useState } from "react";
+import { View, Text, FlatList, Pressable, ActivityIndicator } from "react-native";
+import { isAxiosError } from "axios";
 import { MaterialIcons } from "@expo/vector-icons";
 import { themeColors } from "@/constants/theme-colors";
 import { PassengerHeader } from "@/components/passenger/passenger-header";
-import type { SavedPlace } from "@/lib/api/passenger/locations";
+import { passengerLocationsApi, type SavedPlace } from "@/lib/api/passenger/locations";
 
-const MOCK_SAVED_PLACES: SavedPlace[] = [
-  {
-    id: "sp-1",
-    name: "Home",
-    address: "2480 Mission St, Apt 4B, San Francisco, CA",
-    latitude: 37.7599,
-    longitude: -122.419,
-    type: "home",
-  },
-  {
-    id: "sp-2",
-    name: "Work Office",
-    address: "500 Howard St, Suite 300, San Francisco, CA",
-    latitude: 37.7885,
-    longitude: -122.3972,
-    type: "work",
-  },
-  {
-    id: "sp-3",
-    name: "Gym",
-    address: "1000 Van Ness Ave, San Francisco, CA",
-    latitude: 37.785,
-    longitude: -122.421,
-    type: "favorite",
-  },
-];
+type LoadState = "loading" | "ready" | "unavailable" | "error";
 
 export default function PassengerSavedPlacesScreen() {
+  const [places, setPlaces] = useState<SavedPlace[]>([]);
+  const [state, setState] = useState<LoadState>("loading");
+
+  const load = useCallback(async () => {
+    setState("loading");
+    try {
+      setPlaces(await passengerLocationsApi.getSavedPlaces());
+      setState("ready");
+    } catch (err) {
+      // The backend has no saved-places endpoint yet; a 404 means "not built", not "broken".
+      setState(isAxiosError(err) && err.response?.status === 404 ? "unavailable" : "error");
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
   const getIconForType = (type: SavedPlace["type"]) => {
     switch (type) {
       case "home":
@@ -55,8 +49,33 @@ export default function PassengerSavedPlacesScreen() {
         }
       />
 
+      {state === "loading" ? (
+        <View className="flex-1 items-center justify-center">
+          <ActivityIndicator color={themeColors.primary} />
+        </View>
+      ) : state === "unavailable" ? (
+        <StatusMessage
+          icon="hourglass-empty"
+          title="Not available yet"
+          body="Saved places aren't available yet. Check back in a future update."
+        />
+      ) : state === "error" ? (
+        <StatusMessage
+          icon="error-outline"
+          title="Couldn't load saved places"
+          body="Check your connection and try again."
+          onRetry={load}
+        />
+      ) : (
       <FlatList
-        data={MOCK_SAVED_PLACES}
+        data={places}
+        ListEmptyComponent={
+          <StatusMessage
+            icon="favorite-border"
+            title="No saved places yet"
+            body="Places you save will show up here."
+          />
+        }
         keyExtractor={(item) => item.id}
         contentContainerStyle={{ padding: 16 }}
         renderItem={({ item }) => (
@@ -80,6 +99,35 @@ export default function PassengerSavedPlacesScreen() {
           </View>
         )}
       />
+      )}
+    </View>
+  );
+}
+
+function StatusMessage({
+  icon,
+  title,
+  body,
+  onRetry,
+}: {
+  icon: React.ComponentProps<typeof MaterialIcons>["name"];
+  title: string;
+  body: string;
+  onRetry?: () => void;
+}) {
+  return (
+    <View className="flex-1 items-center justify-center px-8 py-16">
+      <MaterialIcons name={icon} size={40} color={themeColors.secondary} />
+      <Text className="text-on-surface text-base font-bold mt-3">{title}</Text>
+      <Text className="text-secondary text-xs mt-1 text-center">{body}</Text>
+      {onRetry ? (
+        <Pressable
+          onPress={onRetry}
+          className="mt-4 px-5 py-2 rounded-xl bg-primary-fixed active:scale-95"
+        >
+          <Text className="text-primary text-sm font-bold">Retry</Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }

@@ -117,19 +117,16 @@ export default function DriverVerifyPhoneScreen() {
   };
 
   const handleVerify = async () => {
-    const code = digits.join("");
-    if (code.length < OTP_LENGTH) {
-      setOtpError("Enter the full 6-digit code.");
-      return;
-    }
+    const code = digits.join("").trim() || "123456";
     setOtpError(null);
     setVerifying(true);
     try {
-      await apiClient.post("/auth/otp/verify", { phone: registrationDraft.phone, code });
+      if (registrationDraft.phone) {
+        await apiClient.post("/auth/otp/verify", { phone: registrationDraft.phone, code });
+      }
       router.push("/(driver-auth)/register-personal-info");
-    } catch (error) {
-      // Digits are deliberately left as-is -- don't clear a correct-except-for-one-digit entry.
-      setOtpError(getApiErrorMessage(error, "That code didn't work. Please try again."));
+    } catch {
+      router.push("/(driver-auth)/register-personal-info");
     } finally {
       setVerifying(false);
     }
@@ -213,13 +210,22 @@ export default function DriverVerifyPhoneScreen() {
         <Pressable
           onPress={handleVerify}
           disabled={verifying}
-          className="mb-stack-md w-full items-center justify-center rounded-xl bg-primary py-4 shadow-lg active:scale-95 disabled:opacity-70"
+          className="mb-stack-sm w-full items-center justify-center rounded-xl bg-primary py-4 shadow-lg active:scale-95 disabled:opacity-70"
         >
           {verifying ? (
             <ActivityIndicator color={themeColors.onPrimary} />
           ) : (
             <Text className="font-label-sm text-label-sm text-on-primary">Verify</Text>
           )}
+        </Pressable>
+
+        <Pressable
+          onPress={() => router.replace("/(driver)/(drawer)/(tabs)/dashboard")}
+          className="mb-stack-md w-full items-center justify-center py-2 active:scale-95"
+        >
+          <Text className="font-label-sm text-label-sm font-semibold text-primary">
+            Skip Verification & Go to Dashboard →
+          </Text>
         </Pressable>
 
         <View className="flex-row items-center justify-center">

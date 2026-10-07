@@ -2,7 +2,6 @@ import React, { useState } from "react";
 import {
   View,
   Text,
-  Image,
   Pressable,
   StyleSheet,
   StatusBar,
@@ -10,74 +9,87 @@ import {
 import { useRouter } from "expo-router";
 import { MaterialIcons } from "@expo/vector-icons";
 import { themeColors } from "@/constants/theme-colors";
-
-const MAP_URI =
-  "https://lh3.googleusercontent.com/aida-public/AB6AXuBtjPmAgEADa4svU5-KkcW8mPUNuvFBscTmpdVvhWq2_zhkpX4-377F6WofwMSIgr_m9LCIsf3AkjZVgtSIC9SSZKtLh2hEniyywMDfp0MNEqrRT9VgVj0gi7usmV6wv_iiBz7Qe-fa-6j89cAvrX6ALT7kVes2whfB9x6gtNC74WswK3Vr85j5eaEHqo4Dw1LfG80INhquLoJAZupHng3VSiLJmse83vLn80uAIlUymuUPvKJ7O5oh";
-
-const AVATAR_URI =
-  "https://lh3.googleusercontent.com/aida-public/AB6AXuCtkgf29G9WfIrjdG3Eia2IMb8MQcvthv1qBCZ6rS6CwYqeKDMEYbROXLnw4UWepRju3rln6sovn7TKc3AckBtsDfsLoh84CX0nsNCrHimqfZTLNcUQ_WZmsOUkJkwiJYX9qhi5uoBcTIc4U8MU0P0qi0NhvDNotjk_ad28jSLn4-iTBj6rTBeAHKNYTVnSCgfOGSPnR8oyKkL6qP_yPGcuJx6e30heLu20WeUHQ487djuLaOakmI-1";
-
 import { usePassengerRideStore } from "@/store/passenger/passenger-ride-store";
+import { formatCurrency } from "@/utils/currency";
 
-// Half-dollars ($0.50) step
-const MIN_FARE = 100;    // $1.00 minimum
-const MAX_FARE = 50000;  // $500.00 maximum
-const STEP = 50;         // $0.50
-
-const formatFare = (cents: number) => ({
-  integer: Math.floor(cents / 100).toString(),
-  decimal: (cents % 100).toString().padStart(2, "0"),
-});
-
+// All fare numbers (recommended, minimum, maximum, step) come from the server quote fetched on the
+// ride-select screen. This screen has no fare formula or constants of its own.
 export default function PassengerFareOfferScreen() {
   const router = useRouter();
   const {
     pickup,
     destination,
-    estimatedDistanceKm,
     selectedRideType,
     proposedFare,
     setProposedFare,
+    fareQuotes,
   } = usePassengerRideStore();
 
-  const distance = estimatedDistanceKm && estimatedDistanceKm > 0 ? estimatedDistanceKm : 6.5;
+  const quote = fareQuotes[selectedRideType];
 
-  // Compute baseline cents
-  const baselineCents = React.useMemo(() => {
-    if (proposedFare && proposedFare > 0) {
-      return Math.round(proposedFare * 100);
+  // Start from a previously chosen fare if it is still inside the quote's range, else the
+  // server-recommended fare.
+  const [fare, setFare] = useState<number | null>(() => {
+    if (!quote) return null;
+    if (proposedFare && proposedFare >= quote.minimumFare && proposedFare <= quote.maximumFare) {
+      return proposedFare;
     }
-    let base = 5 + distance * 2.5;
-    if (selectedRideType === "bike") base = 3 + distance * 1.4;
-    else if (selectedRideType === "premium") base = 8 + distance * 3.8;
-    else if (selectedRideType === "xl") base = 10 + distance * 4.5;
-    return Math.round(base * 100);
-  }, [proposedFare, distance, selectedRideType]);
-
-  const [fareCents, setFareCents] = useState(baselineCents);
-
-  const suggestedLow = ((baselineCents * 0.85) / 100).toFixed(2);
-  const suggestedHigh = ((baselineCents * 1.15) / 100).toFixed(2);
-
-  const handleDecrease = () => setFareCents((c) => Math.max(MIN_FARE, c - STEP));
-  const handleIncrease = () => setFareCents((c) => Math.min(MAX_FARE, c + STEP));
-  const handleRequest = () => {
-    const finalFare = Math.round(fareCents) / 100;
-    setProposedFare(finalFare);
-    router.push("/(passenger)/ride-confirm" as any);
-  };
-
-  const { integer, decimal } = formatFare(fareCents);
+    return quote.recommendedFare;
+  });
 
   const pickupDisplay = pickup?.name || pickup?.address || "Pickup Location";
   const destDisplay = destination?.name || destination?.address || "Destination";
+
+  if (!quote || fare === null) {
+    return (
+      <View style={styles.root}>
+        <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
+        <View style={styles.mapBg} />
+        <View style={styles.topNav}>
+          <Pressable
+            style={styles.menuBtn}
+            onPress={() => router.back()}
+            accessibilityLabel="Go back"
+          >
+            <MaterialIcons name="arrow-back" size={24} color={themeColors.primary} />
+          </Pressable>
+          <Text style={styles.brand}>Ryde</Text>
+          <View style={styles.menuBtn} />
+        </View>
+        <View style={styles.card}>
+          <View style={styles.cardBody}>
+            <Text style={styles.fareContextTitle}>Fare not available</Text>
+            <Text style={styles.fareContextSub}>
+              We could not load the fare for this trip. Go back and choose your ride again.
+            </Text>
+            <Pressable
+              onPress={() => router.back()}
+              style={({ pressed }) => [styles.btnRequest, pressed && styles.pressed]}
+            >
+              <Text style={styles.btnRequestText}>Go back</Text>
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    );
+  }
+
+  const atMin = fare <= quote.minimumFare;
+  const atMax = fare >= quote.maximumFare;
+
+  const handleDecrease = () => setFare((f) => Math.max(quote.minimumFare, (f ?? 0) - quote.fareStep));
+  const handleIncrease = () => setFare((f) => Math.min(quote.maximumFare, (f ?? 0) + quote.fareStep));
+  const handleRequest = () => {
+    setProposedFare(fare);
+    router.push("/(passenger)/ride-confirm" as any);
+  };
 
   return (
     <View style={styles.root}>
       <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
 
-      {/* Map */}
-      <Image source={{ uri: MAP_URI }} style={styles.mapBg} resizeMode="cover" />
+      {/* Neutral backdrop (the route map is shown on the route-preview screen) */}
+      <View style={styles.mapBg} />
 
       {/* Map markers */}
       <View style={styles.pickupMarker} />
@@ -96,9 +108,7 @@ export default function PassengerFareOfferScreen() {
           <MaterialIcons name="arrow-back" size={24} color={themeColors.primary} />
         </Pressable>
         <Text style={styles.brand}>Ryde</Text>
-        <Pressable style={styles.avatarBtn}>
-          <Image source={{ uri: AVATAR_URI }} style={styles.avatarImg} resizeMode="cover" />
-        </Pressable>
+        <View style={styles.menuBtn} />
       </View>
 
       {/* Bottom Card */}
@@ -125,7 +135,10 @@ export default function PassengerFareOfferScreen() {
           {/* Fare context */}
           <View style={styles.fareContext}>
             <Text style={styles.fareContextTitle}>Offer your fare</Text>
-            <Text style={styles.fareContextSub}>Suggested range: ${suggestedLow} – ${suggestedHigh}</Text>
+            <Text style={styles.fareContextSub}>
+              Suggested {formatCurrency(quote.recommendedFare)} · allowed{" "}
+              {formatCurrency(quote.minimumFare)} – {formatCurrency(quote.maximumFare)}
+            </Text>
           </View>
 
           {/* Fare stepper */}
@@ -135,19 +148,20 @@ export default function PassengerFareOfferScreen() {
               style={({ pressed }) => [
                 styles.fareBtn,
                 pressed && styles.fareBtnPressed,
-                fareCents <= MIN_FARE && styles.fareBtnDisabled,
+                atMin && styles.fareBtnDisabled,
               ]}
-              disabled={fareCents <= MIN_FARE}
+              disabled={atMin}
               accessibilityLabel="Decrease fare"
+              accessibilityState={{ disabled: atMin }}
             >
               <MaterialIcons name="remove" size={24} color={themeColors.onSurface} />
             </Pressable>
 
             {/* Fare display */}
             <View style={styles.fareDisplay}>
-              <Text style={styles.fareCurrency}>$</Text>
-              <Text style={styles.fareInteger}>{integer}</Text>
-              <Text style={styles.fareDecimal}>.{decimal}</Text>
+              <Text style={styles.fareInteger} accessibilityLabel={`Offered fare ${formatCurrency(fare)}`}>
+                {formatCurrency(fare)}
+              </Text>
             </View>
 
             <Pressable
@@ -155,14 +169,26 @@ export default function PassengerFareOfferScreen() {
               style={({ pressed }) => [
                 styles.fareBtn,
                 pressed && styles.fareBtnPressed,
-                fareCents >= MAX_FARE && styles.fareBtnDisabled,
+                atMax && styles.fareBtnDisabled,
               ]}
-              disabled={fareCents >= MAX_FARE}
+              disabled={atMax}
               accessibilityLabel="Increase fare"
+              accessibilityState={{ disabled: atMax }}
             >
               <MaterialIcons name="add" size={24} color={themeColors.onSurface} />
             </Pressable>
           </View>
+
+          {atMin && (
+            <Text style={styles.limitNote}>
+              {formatCurrency(quote.minimumFare)} is the lowest fare drivers can be offered for this trip.
+            </Text>
+          )}
+          {atMax && (
+            <Text style={styles.limitNote}>
+              {formatCurrency(quote.maximumFare)} is the highest fare allowed for this trip.
+            </Text>
+          )}
 
           {/* CTA */}
           <Pressable
@@ -185,7 +211,14 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   mapBg: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
+    backgroundColor: themeColors.surfaceContainer,
+  },
+  limitNote: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: themeColors.onSurfaceVariant,
+    textAlign: "center",
   },
   // ── Map markers ──
   pickupMarker: {
@@ -411,11 +444,11 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   fareInteger: {
-    fontSize: 52,
+    fontSize: 34,
     fontWeight: "700",
     color: themeColors.primary,
-    lineHeight: 52,
-    letterSpacing: -1.04,
+    lineHeight: 44,
+    letterSpacing: -0.5,
   },
   fareDecimal: {
     fontSize: 24,

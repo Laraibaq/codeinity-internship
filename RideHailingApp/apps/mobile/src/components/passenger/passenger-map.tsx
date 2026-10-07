@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useImperativeHandle, forwardRef } from "react
 import { StyleSheet, View, type StyleProp, type ViewStyle } from "react-native";
 import MapView, { Marker, Polyline, type Region } from "react-native-maps";
 import { themeColors } from "@/constants/theme-colors";
+import { PAKISTAN_DEFAULT_REGION } from "@/constants/default-region";
 import { PickupMarker } from "./pickup-marker";
 import { DestinationMarker } from "./destination-marker";
 
@@ -31,12 +32,7 @@ export interface PassengerMapRef {
   getMapView: () => MapView | null;
 }
 
-const DEFAULT_PASSENGER_REGION: Region = {
-  latitude: 37.7749,
-  longitude: -122.4194,
-  latitudeDelta: 0.05,
-  longitudeDelta: 0.05,
-};
+const DEFAULT_PASSENGER_REGION: Region = PAKISTAN_DEFAULT_REGION;
 
 export const PassengerMap = forwardRef<PassengerMapRef, PassengerMapProps>(
   (
@@ -190,6 +186,6 @@ export const PassengerMap = forwardRef<PassengerMapRef, PassengerMapProps>(
 
 const styles = StyleSheet.create({
   container: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
 });

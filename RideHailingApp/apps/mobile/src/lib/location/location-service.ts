@@ -73,6 +73,11 @@ export async function getCurrentCoordinates(): Promise<Coordinates | null> {
   }
 }
 
+import {
+  searchPlacesNominatim,
+  reverseGeocodeNominatim,
+} from "@/lib/api/passenger/nominatim";
+
 /**
  * Converts latitude and longitude into human-readable street and city address
  */
@@ -80,6 +85,16 @@ export async function reverseGeocodeLocation(
   latitude: number,
   longitude: number,
 ): Promise<{ name: string; address: string }> {
+  // Try Nominatim reverse geocode first for rich local address names
+  try {
+    const nominatimRev = await reverseGeocodeNominatim(latitude, longitude);
+    if (nominatimRev && nominatimRev.name && nominatimRev.address) {
+      return nominatimRev;
+    }
+  } catch {
+    // fallback
+  }
+
   try {
     const results = await Location.reverseGeocodeAsync({ latitude, longitude });
     if (!results || results.length === 0) {
@@ -110,7 +125,7 @@ export async function reverseGeocodeLocation(
 }
 
 /**
- * Searches for places via Mapbox Places API if configured, or falls back to native device geocoding
+ * Searches for places via Nominatim (with Pakistan priority), Mapbox, or native device geocoding
  */
 export async function searchPlaces(
   query: string,
@@ -119,7 +134,17 @@ export async function searchPlaces(
   const trimmed = query.trim();
   if (!trimmed) return [];
 
-  // Try Mapbox Places API first if configured
+  // 1. Try Nominatim (high precision for Pakistan landmarks, malls, airports, universities, cities)
+  try {
+    const osmResults = await searchPlacesNominatim(trimmed, proximity);
+    if (osmResults.length > 0) {
+      return osmResults;
+    }
+  } catch (err: any) {
+    console.warn("Nominatim search error, trying fallback:", err.message);
+  }
+
+  // 2. Try Mapbox Places API if configured
   if (isMapboxConfigured()) {
     try {
       const mapboxResults = await searchPlacesMapbox(trimmed, proximity);
@@ -131,7 +156,7 @@ export async function searchPlaces(
     }
   }
 
-  // Native expo-location geocoding fallback
+  // 3. Native expo-location geocoding fallback
   try {
     const geoResults = await Location.geocodeAsync(trimmed);
     if (!geoResults || geoResults.length === 0) {

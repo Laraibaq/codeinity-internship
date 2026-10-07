@@ -5,10 +5,13 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 
 import { themeColors } from "@/constants/theme-colors";
 import { formatCurrency } from "@/utils/currency";
-import { apiClient } from "@/lib/api-client";
 import { negotiationApi, type AiFareSuggestion } from "@/lib/api/negotiation";
+import { describeNegotiationError } from "@/lib/negotiation-errors";
 
-const STEP = 0.5;
+// TODO(business sign-off): the driver has no fare quote, and the suggestion endpoint does not return
+// a step. 50 mirrors the backend's PLACEHOLDER_FARE_STEP_REQUIRES_BUSINESS_SIGNOFF (fare-config.ts);
+// replace with a server-provided step once one is exposed to drivers.
+const STEP = 50;
 
 // Source: "Counter Offer" (form state) + "Counter Offer Sent" (awaiting-response state). Presented
 // as a transparentModal (see (driver)/_layout.tsx), opened from dashboard.tsx's inline request
@@ -32,9 +35,9 @@ const STEP = 0.5;
 // - `hover:*` / `group-hover:*` / `transition-*` / `duration-*` dropped throughout, including the
 //   form button's hover sheen sweep -- no hover state on touch devices.
 //
-// Fare stepper: local `useState<number>` (rule 5's "approved presentation state"), starting at 16.00
-// and moving in $0.50 increments, matching the source's vanilla-JS behavior exactly. Every dollar
-// amount uses `formatCurrency` per this task's instruction.
+// Fare stepper: local `useState<number>` starting at the ride's current PKR price and moving in
+// STEP increments, clamped to the advisory [minBound, maxBound] once loaded. Every amount uses
+// `formatCurrency`.
 //
 // `phase` ('form' | 'sent') replaces the earlier instant-dismiss TODO: "Send Counter Offer" now
 // transitions to 'sent' instead of calling `router.back()` immediately. The sent state's "Suggested
@@ -53,41 +56,54 @@ const STEP = 0.5;
 export default function CounterOfferScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ rideId?: string; initialFare?: string }>();
-  const initialFareNum = params.initialFare ? Number(params.initialFare) : 16;
+  // Start from the ride's current price (passed by the dashboard, already PKR); no USD-scale default.
+  const initialFareNum = params.initialFare ? Number(params.initialFare) : 0;
   const [fare, setFare] = useState(
-    Number.isFinite(initialFareNum) && initialFareNum > 0 ? initialFareNum : 16,
+    Number.isFinite(initialFareNum) && initialFareNum > 0 ? initialFareNum : 0,
   );
   const [phase, setPhase] = useState<"form" | "sent">("form");
   const [isSending, setIsSending] = useState(false);
-  const [aiSuggestion, setAiSuggestion] = useState<AiFareSuggestion | null>(null);
+  const [errorText, setErrorText] = useState<string | null>(null);
+  const [suggestion, setSuggestion] = useState<AiFareSuggestion | null>(null);
+
+  const minBound = suggestion?.minBound;
+  const maxBound = suggestion?.maxBound;
+  const clampFare = (value: number) => {
+    let v = value;
+    if (minBound != null) v = Math.max(minBound, v);
+    if (maxBound != null) v = Math.min(maxBound, v);
+    return Math.max(0, v);
+  };
 
   useEffect(() => {
     if (params.rideId && !params.rideId.startsWith("req-")) {
       negotiationApi
         .getFareSuggestion(params.rideId)
-        .then((res) => setAiSuggestion(res))
+        .then((res) => {
+          setSuggestion(res);
+          // Pull the starting value inside the advisory range once it is known.
+          setFare((value) => {
+            const base = value > 0 ? value : res.suggestedFare;
+            return Math.min(res.maxBound, Math.max(res.minBound, base));
+          });
+        })
         .catch(() => {});
     }
   }, [params.rideId]);
 
   const handleSendCounterOffer = async () => {
+    if (!params.rideId || params.rideId.startsWith("req-")) return;
     setIsSending(true);
+    setErrorText(null);
     try {
-      if (params.rideId && !params.rideId.startsWith("req-")) {
-        try {
-          await negotiationApi.driverCounter(params.rideId, fare);
-        } catch {
-          await apiClient.post(`/rides/${params.rideId}/offers`, {
-            offerType: "counter",
-            offerAmount: fare,
-          });
-        }
-      }
+      await negotiationApi.driverCounter(params.rideId, fare);
       LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
       setPhase("sent");
-    } catch {
-      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-      setPhase("sent");
+    } catch (err) {
+      setErrorText(
+        describeNegotiationError(err, "driver", "Could not send your counter-offer. Please try again.")
+          .message,
+      );
     } finally {
       setIsSending(false);
     }
@@ -114,7 +130,7 @@ export default function CounterOfferScreen() {
             <View className="mb-stack-lg items-center">
               <View className="w-full flex-row items-center justify-center gap-stack-md rounded-3xl border border-outline-variant/30 bg-surface-container p-stack-sm shadow-sm">
                 <Pressable
-                  onPress={() => setFare((value) => Math.max(0, value - STEP))}
+                  onPress={() => setFare((value) => clampFare(value - STEP))}
                   className="h-14 w-14 items-center justify-center rounded-full border border-outline-variant bg-surface-container-lowest shadow-sm active:scale-95"
                 >
                   <MaterialIcons name="remove" size={32} color={themeColors.primary} />
@@ -126,24 +142,31 @@ export default function CounterOfferScreen() {
                   {formatCurrency(fare)}
                 </Text>
                 <Pressable
-                  onPress={() => setFare((value) => value + STEP)}
+                  onPress={() => setFare((value) => clampFare(value + STEP))}
                   className="h-14 w-14 items-center justify-center rounded-full border border-outline-variant bg-surface-container-lowest shadow-sm active:scale-95"
                 >
                   <MaterialIcons name="add" size={32} color={themeColors.primary} />
                 </Pressable>
               </View>
 
-              <View className="mt-stack-sm flex-row items-center gap-2 rounded-full border border-primary-fixed/50 bg-inverse-on-surface px-4 py-2">
-                <MaterialIcons name={aiSuggestion ? "auto-awesome" : "insights"} size={18} color={themeColors.primary} />
-                <Text className="font-label-sm text-label-sm text-on-surface-variant">
-                  {aiSuggestion ? "AI Market Range: " : "Market Range: "}
-                  <Text className="text-primary font-semibold">
-                    {formatCurrency(aiSuggestion?.minBound ?? 14)} - {formatCurrency(aiSuggestion?.maxBound ?? 18)}
+              {suggestion ? (
+                <View className="mt-stack-sm flex-row items-center gap-2 rounded-full border border-primary-fixed/50 bg-inverse-on-surface px-4 py-2">
+                  <MaterialIcons name="insights" size={18} color={themeColors.primary} />
+                  <Text className="font-label-sm text-label-sm text-on-surface-variant">
+                    Fair fare range (estimate):{" "}
+                    <Text className="text-primary font-semibold">
+                      {formatCurrency(suggestion.minBound)} - {formatCurrency(suggestion.maxBound)}
+                    </Text>
                   </Text>
-                  {aiSuggestion ? " (Advisory)" : ""}
-                </Text>
-              </View>
+                </View>
+              ) : null}
             </View>
+
+            {errorText ? (
+              <Text className="mb-stack-sm text-center font-label-sm text-label-sm text-error">
+                {errorText}
+              </Text>
+            ) : null}
 
             {/* Fixed: className used to interpolate `isSending ? "opacity-70" : ""` into a template
                 literal -- the same NativeWind runtime anti-pattern root-caused on login.tsx's
@@ -153,7 +176,7 @@ export default function CounterOfferScreen() {
                 @/components/login-method-toggle.tsx's activeSegmentStyle. */}
             <Pressable
               onPress={handleSendCounterOffer}
-              disabled={isSending}
+              disabled={isSending || fare <= 0}
               className="mt-auto h-14 w-full flex-row items-center justify-center gap-2 rounded-xl bg-primary shadow-lg active:scale-[0.98]"
               style={isSending ? { opacity: 0.7 } : undefined}
             >

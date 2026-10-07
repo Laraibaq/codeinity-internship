@@ -12,6 +12,8 @@ import { CreateRideDto } from './dto/create-ride.dto';
 import { CreateOfferDto, OfferTypeEnum } from './dto/create-offer.dto';
 import { UpdateRideStatusDto, UpdateRideStatusEnum } from './dto/update-ride-status.dto';
 
+import { FareQuoteService } from '../negotiation/fare-quote.service';
+import { SUPPORTED_RIDE_PAYMENT_METHODS } from '../negotiation/fare-config';
 import { MatchingService, calculateHaversineDistanceKm } from './matching.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -25,7 +27,52 @@ export class RidesService {
     private readonly matchingService: MatchingService,
     private readonly realtimeService: RealtimeService,
     private readonly notificationsService: NotificationsService,
+    private readonly fareQuoteService: FareQuoteService,
   ) {}
+
+  // Guards every legacy accept path (acceptOffer, driverAcceptOffer, and
+  // updateRideStatus's driver-direct-accept branch) against the accept-bypass
+  // bug found in the Phase 0 audit: a driver could tap a plain "Accept" and
+  // get finalFare set from RideOffer.offerAmount / Ride.proposedFare, even
+  // while a real fare negotiation (Negotiation/NegotiationOffer) had already
+  // moved the agreed amount somewhere else for that same ride+driver pair.
+  //
+  // Approach chosen: reject-if-active-negotiation-exists, not "reroute
+  // through the negotiation-accept endpoint." Rerouting isn't a clean
+  // option here -- these legacy paths key off RideOffer ids, which don't
+  // correspond to NegotiationOffer ids, so grafting them onto
+  // NegotiationService.acceptNegotiation would mean inventing an id mapping
+  // between two independent tables. A guard is the minimal, additive fix:
+  // it changes nothing about any accept that has no competing negotiation,
+  // and for the case that matters, it fails loudly (ConflictException)
+  // instead of silently applying a stale fare. Phase 3 is responsible for
+  // pointing the frontend's Accept buttons at the real negotiation-accept
+  // endpoint when one applies; this phase only makes sure the backend can't
+  // be fooled regardless of what the UI does in the meantime.
+  //
+  // Existence of an `active` Negotiation row for (rideId, driverId) is
+  // treated as sufficient reason to reject, rather than trying to compare
+  // its currentAmount against the legacy path's candidate finalFare -- a
+  // Negotiation row is only ever created once a driver has actually
+  // countered (see NegotiationService.driverCounter), so its mere existence
+  // already means "the amount on offer differs from the original ask,"
+  // which is exactly the condition the legacy path can't see.
+  private async assertNoActiveNegotiation(
+    tx: any,
+    rideId: string,
+    driverId: string,
+  ): Promise<void> {
+    const activeNegotiation = await tx.negotiation.findUnique({
+      where: { rideId_driverId: { rideId, driverId } },
+    });
+    if (activeNegotiation && activeNegotiation.status === 'active') {
+      throw new ConflictException(
+        'An active fare negotiation exists for this ride and driver. Use ' +
+          'POST /rides/:id/negotiation/accept/:offerId to accept at the ' +
+          'negotiated fare instead of this endpoint.',
+      );
+    }
+  }
 
   async createRide(passengerId: string, dto: CreateRideDto) {
     const passenger = await this.prisma.user.findUnique({
@@ -35,7 +82,26 @@ export class RidesService {
       throw new NotFoundException('Passenger account not found');
     }
 
-    const aiRecommendedFare = dto.aiRecommendedFare ?? dto.proposedFare;
+    const paymentMethod = dto.paymentMethod ?? 'cash';
+    if (!SUPPORTED_RIDE_PAYMENT_METHODS.includes(paymentMethod)) {
+      throw new BadRequestException(
+        `Payment method '${paymentMethod}' is not supported yet. Supported: ${SUPPORTED_RIDE_PAYMENT_METHODS.join(', ')}`,
+      );
+    }
+
+    // Server-authoritative fare bounds: recomputed here from the request, never trusted from the
+    // client. The passenger app fetches the same quote from POST /fare/quote.
+    const quote = this.fareQuoteService.quote(dto);
+    if (dto.proposedFare < quote.minimumFare) {
+      throw new BadRequestException(
+        `Proposed fare PKR ${dto.proposedFare} is below the minimum allowed fare of PKR ${quote.minimumFare} for this trip`,
+      );
+    }
+    if (dto.proposedFare > quote.maximumFare) {
+      throw new BadRequestException(
+        `Proposed fare PKR ${dto.proposedFare} is above the maximum allowed fare of PKR ${quote.maximumFare} for this trip`,
+      );
+    }
 
     const ride = await this.prisma.ride.create({
       data: {
@@ -49,7 +115,11 @@ export class RidesService {
         distanceKm: dto.distanceKm,
         etaMinutes: dto.etaMinutes,
         proposedFare: dto.proposedFare,
-        aiRecommendedFare,
+        // Server's own recommendation (deterministic formula), not a client-supplied value.
+        aiRecommendedFare: quote.recommendedFare,
+        fareTier: quote.fareTier,
+        vehicleType: quote.vehicleType,
+        paymentMethod,
         status: 'requested',
       },
       include: {
@@ -175,6 +245,17 @@ export class RidesService {
         },
         offers: {
           where: { driverId },
+        },
+        // Only the requesting driver's own negotiation -- never other drivers'.
+        negotiations: {
+          where: { driverId },
+          include: {
+            offers: {
+              where: { status: 'pending' },
+              orderBy: { createdAt: 'desc' },
+              take: 1,
+            },
+          },
         },
       },
     });
@@ -436,6 +517,10 @@ export class RidesService {
         throw new ConflictException('Driver is currently occupied with another ride');
       }
 
+      // 3b. Reject if a real fare negotiation is in progress for this ride+driver
+      // (see assertNoActiveNegotiation's comment for why this exists).
+      await this.assertNoActiveNegotiation(tx, rideId, offer.driverId);
+
       // 4. Update accepted offer
       const acceptedOffer = await tx.rideOffer.update({
         where: { id: offerId },
@@ -621,6 +706,10 @@ export class RidesService {
       if (occupiedRide) {
         throw new ConflictException('Driver is currently occupied with another ride');
       }
+
+      // Reject if a real fare negotiation is in progress for this ride+driver
+      // (see assertNoActiveNegotiation's comment for why this exists).
+      await this.assertNoActiveNegotiation(tx, rideId, driverId);
 
       const acceptedOffer = await tx.rideOffer.update({
         where: { id: offerId },
@@ -820,6 +909,10 @@ export class RidesService {
         }
 
         const result = await this.prisma.$transaction(async (tx) => {
+          // Reject if a real fare negotiation is in progress for this ride+driver
+          // (see assertNoActiveNegotiation's comment for why this exists).
+          await this.assertNoActiveNegotiation(tx, rideId, user.sub);
+
           const updateResult = await tx.ride.updateMany({
             where: {
               id: rideId,

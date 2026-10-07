@@ -9,6 +9,9 @@ import { UpdateRideStatusEnum } from './dto/update-ride-status.dto';
 import { MatchingService } from './matching.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { FareQuoteService } from '../negotiation/fare-quote.service';
+import { AiNegotiationProvider } from '../negotiation/ai-negotiation.provider';
+import { FareTierEnum } from '../negotiation/dto/fare-quote.dto';
 
 describe('RidesService & RidesController (Phase 10 Comprehensive)', () => {
   let ridesService: RidesService;
@@ -34,7 +37,9 @@ describe('RidesService & RidesController (Phase 10 Comprehensive)', () => {
     dropoffAddress: 'Fisherman Wharf',
     distanceKm: 5.2,
     etaMinutes: 15,
-    proposedFare: 20.0,
+    // standard tier, 5.2 km: server quote is min 250 / recommended 350 / max 700 (placeholder rates)
+    proposedFare: 350,
+    fareTier: FareTierEnum.standard,
   };
 
   beforeEach(async () => {
@@ -61,6 +66,12 @@ describe('RidesService & RidesController (Phase 10 Comprehensive)', () => {
         findMany: jest.fn(),
         update: jest.fn(),
         updateMany: jest.fn(),
+      },
+      // Backs assertNoActiveNegotiation's guard (added alongside the new negotiation-accept-bypass
+      // fix). Defaults to "no active negotiation" so every existing accept-path test keeps its
+      // prior behavior unless a test explicitly mocks an active one.
+      negotiation: {
+        findUnique: jest.fn().mockResolvedValue(null),
       },
       notification: {
         create: jest.fn(),
@@ -105,6 +116,10 @@ describe('RidesService & RidesController (Phase 10 Comprehensive)', () => {
           provide: NotificationsService,
           useValue: notificationsService,
         },
+        // Real (deterministic, dependency-free) quote engine, so these tests exercise the actual
+        // server-side fare validation rather than a mock of it.
+        FareQuoteService,
+        AiNegotiationProvider,
       ],
     }).compile();
 
@@ -130,12 +145,66 @@ describe('RidesService & RidesController (Phase 10 Comprehensive)', () => {
           data: expect.objectContaining({
             passengerId: mockPassengerId,
             status: 'requested',
-            proposedFare: 20.0,
+            proposedFare: 350,
+            fareTier: 'standard',
+            vehicleType: 'car',
+            paymentMethod: 'cash',
+            aiRecommendedFare: 350,
           }),
         }),
       );
       expect(result.id).toBe(mockRideId);
       expect(result.status).toBe('requested');
+    });
+
+    it('rejects a proposed fare below the server-computed minimum', async () => {
+      prisma.user.findUnique.mockResolvedValue({ id: mockPassengerId, name: 'Alice' });
+
+      await expect(
+        ridesService.createRide(mockPassengerId, { ...sampleRideDto, proposedFare: 200 }),
+      ).rejects.toThrow(/below the minimum allowed fare of PKR 250/);
+      expect(prisma.ride.create).not.toHaveBeenCalled();
+    });
+
+    it('rejects a proposed fare above the server-computed maximum', async () => {
+      prisma.user.findUnique.mockResolvedValue({ id: mockPassengerId, name: 'Alice' });
+
+      await expect(
+        ridesService.createRide(mockPassengerId, { ...sampleRideDto, proposedFare: 750 }),
+      ).rejects.toThrow(/above the maximum allowed fare of PKR 700/);
+      expect(prisma.ride.create).not.toHaveBeenCalled();
+    });
+
+    it('does not let a client shrink the price floor by under-reporting distance', async () => {
+      prisma.user.findUnique.mockResolvedValue({ id: mockPassengerId, name: 'Alice' });
+      // Straight line between the sample coordinates is ~3.8 km; claim 0.1 km to get a tiny floor.
+      await expect(
+        ridesService.createRide(mockPassengerId, { ...sampleRideDto, distanceKm: 0.1, proposedFare: 100 }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('persists paymentMethod, fareTier and vehicleType, and records the server recommendation', async () => {
+      prisma.user.findUnique.mockResolvedValue({ id: mockPassengerId, name: 'Alice' });
+      prisma.ride.create.mockResolvedValue({ id: mockRideId, status: 'requested' });
+
+      await ridesService.createRide(mockPassengerId, {
+        ...sampleRideDto,
+        fareTier: FareTierEnum.bike,
+        paymentMethod: 'cash' as any,
+        proposedFare: 200,
+      });
+
+      const data = prisma.ride.create.mock.calls[0][0].data;
+      expect(data.paymentMethod).toBe('cash');
+      expect(data.fareTier).toBe('bike');
+      expect(data.vehicleType).toBe('bike');
+    });
+
+    it('rejects payment methods that are not supported yet (cash-only MVP)', async () => {
+      prisma.user.findUnique.mockResolvedValue({ id: mockPassengerId, name: 'Alice' });
+      await expect(
+        ridesService.createRide(mockPassengerId, { ...sampleRideDto, paymentMethod: 'card' as any }),
+      ).rejects.toThrow(/not supported yet/);
     });
 
     it('throws ForbiddenException if a driver attempts to create a ride', () => {
@@ -161,6 +230,18 @@ describe('RidesService & RidesController (Phase 10 Comprehensive)', () => {
             status: { in: ['requested', 'offered'] },
             driverId: null,
           },
+          include: expect.objectContaining({
+            negotiations: {
+              where: { driverId: mockDriverId },
+              include: {
+                offers: {
+                  where: { status: 'pending' },
+                  orderBy: { createdAt: 'desc' },
+                  take: 1,
+                },
+              },
+            },
+          }),
         }),
       );
       expect(result).toHaveLength(1);
@@ -374,6 +455,115 @@ describe('RidesService & RidesController (Phase 10 Comprehensive)', () => {
       await expect(
         ridesService.acceptOffer(mockRideId, mockOfferId, mockOtherPassengerId),
       ).rejects.toThrow(ForbiddenException);
+    });
+  });
+
+  describe('8b. Accept paths reject when an active negotiation exists (accept-bypass fix)', () => {
+    beforeEach(() => {
+      prisma.negotiation.findUnique.mockResolvedValue({
+        id: 'negotiation-id',
+        rideId: mockRideId,
+        driverId: mockDriverId,
+        status: 'active',
+        currentAmount: 30.0,
+      });
+    });
+
+    it('acceptOffer throws ConflictException instead of applying the stale offerAmount/proposedFare', async () => {
+      prisma.ride.findUnique.mockResolvedValue({
+        id: mockRideId,
+        passengerId: mockPassengerId,
+        status: 'offered',
+        proposedFare: 20.0,
+        driverId: null,
+      });
+      prisma.rideOffer.findUnique.mockResolvedValue({
+        id: mockOfferId,
+        rideId: mockRideId,
+        driverId: mockDriverId,
+        offerAmount: 24.0,
+        status: 'pending',
+        expiresAt: new Date(Date.now() + 60000),
+      });
+
+      await expect(
+        ridesService.acceptOffer(mockRideId, mockOfferId, mockPassengerId),
+      ).rejects.toThrow(ConflictException);
+      expect(prisma.ride.update).not.toHaveBeenCalled();
+    });
+
+    it('driverAcceptOffer throws ConflictException instead of applying the stale offerAmount/proposedFare', async () => {
+      prisma.rideOffer.findUnique.mockResolvedValue({
+        id: mockOfferId,
+        rideId: mockRideId,
+        driverId: mockDriverId,
+        offerAmount: 24.0,
+        status: 'pending',
+        expiresAt: new Date(Date.now() + 60000),
+      });
+      prisma.ride.findUnique.mockResolvedValue({
+        id: mockRideId,
+        status: 'offered',
+        proposedFare: 20.0,
+        driverId: null,
+      });
+
+      await expect(
+        ridesService.driverAcceptOffer(mockDriverId, mockRideId, mockOfferId),
+      ).rejects.toThrow(ConflictException);
+      expect(prisma.ride.update).not.toHaveBeenCalled();
+    });
+
+    it('a driver mid-negotiation cannot lock the ride in at the stale proposedFare via any legacy path', async () => {
+      // Passenger asked 350; driver countered 450; passenger countered 400 (negotiation still
+      // active). Ride.proposedFare is still the original 350 -- the stale number.
+      prisma.negotiation.findUnique.mockResolvedValue({
+        id: 'negotiation-id',
+        rideId: mockRideId,
+        driverId: mockDriverId,
+        status: 'active',
+        currentAmount: 400,
+      });
+      prisma.ride.findUnique.mockResolvedValue({
+        id: mockRideId,
+        status: 'offered',
+        proposedFare: 350,
+        driverId: null,
+      });
+      prisma.driver.findUnique.mockResolvedValue({ id: mockDriverId, verificationStatus: 'approved' });
+
+      await expect(
+        ridesService.updateRideStatus(
+          mockRideId,
+          { sub: mockDriverId, role: 'driver' } as any,
+          { status: UpdateRideStatusEnum.accepted },
+        ),
+      ).rejects.toThrow(/negotiation\/accept/);
+
+      // Direct-accept writes finalFare through ride.updateMany; it must never have run.
+      expect(prisma.ride.updateMany).not.toHaveBeenCalled();
+      expect(prisma.ride.update).not.toHaveBeenCalled();
+    });
+
+    it('updateRideStatus driver direct-accept throws ConflictException instead of applying proposedFare', async () => {
+      prisma.ride.findUnique.mockResolvedValue({
+        id: mockRideId,
+        status: 'requested',
+        proposedFare: 20.0,
+        driverId: null,
+      });
+      prisma.driver.findUnique.mockResolvedValue({ id: mockDriverId, verificationStatus: 'approved' });
+
+      await expect(
+        ridesService.updateRideStatus(
+          mockRideId,
+          { sub: mockDriverId, role: 'driver' } as any,
+          { status: UpdateRideStatusEnum.accepted },
+        ),
+      ).rejects.toThrow(ConflictException);
+      expect(prisma.ride.updateMany).not.toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ status: 'accepted' }) }),
+      );
     });
   });
 

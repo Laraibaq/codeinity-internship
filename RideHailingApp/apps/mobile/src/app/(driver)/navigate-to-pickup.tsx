@@ -59,6 +59,8 @@ export default function NavigateToPickupScreen() {
     dropoffLng?: string;
   }>();
 
+  const [isMuted, setIsMuted] = useState(false);
+
   const {
     latitude: driverLat,
     longitude: driverLng,
@@ -121,7 +123,7 @@ export default function NavigateToPickupScreen() {
           driverLocation={driverLocation}
           pickup={pickupPoint}
           showsRoutePolyline={true}
-          style={StyleSheet.absoluteFillObject}
+          style={StyleSheet.absoluteFill}
         />
 
         <View
@@ -152,11 +154,18 @@ export default function NavigateToPickupScreen() {
         </View>
 
         <View style={{ top: 140 + insets.top }} className="absolute right-4 z-20 gap-4">
-          <Pressable className="h-12 w-12 items-center justify-center rounded-full border border-outline-variant/30 bg-surface shadow-sm active:scale-95">
+          <Pressable
+            accessibilityLabel="My location"
+            className="h-12 w-12 items-center justify-center rounded-full border border-outline-variant/30 bg-surface shadow-sm active:scale-95"
+          >
             <MaterialIcons name="my-location" size={24} color={themeColors.onSurface} />
           </Pressable>
-          <Pressable className="h-12 w-12 items-center justify-center rounded-full border border-outline-variant/30 bg-surface shadow-sm active:scale-95">
-            <MaterialIcons name="volume-up" size={24} color={themeColors.onSurface} />
+          <Pressable
+            onPress={() => setIsMuted((prev) => !prev)}
+            accessibilityLabel={isMuted ? "Unmute voice guidance" : "Mute voice guidance"}
+            className="h-12 w-12 items-center justify-center rounded-full border border-outline-variant/30 bg-surface shadow-sm active:scale-95"
+          >
+            <MaterialIcons name={isMuted ? "volume-off" : "volume-up"} size={24} color={themeColors.onSurface} />
           </Pressable>
         </View>
       </View>
@@ -255,8 +264,11 @@ export default function NavigateToPickupScreen() {
             >
               <Text className="font-label-sm text-label-sm text-error">Cancel Ride</Text>
             </Pressable>
-            {/* TODO: no share/deep-link mechanism exists yet -- this is a UI-shell placeholder. */}
-            <Pressable className="h-12 flex-1 items-center justify-center rounded-lg border border-outline-variant bg-surface-container active:scale-[0.98]">
+            <Pressable
+              onPress={() => router.push("/(driver)/share-trip-status")}
+              accessibilityLabel="Share trip status"
+              className="h-12 flex-1 items-center justify-center rounded-lg border border-outline-variant bg-surface-container active:scale-[0.98]"
+            >
               <Text className="font-label-sm text-label-sm text-on-surface">Share Ride</Text>
             </Pressable>
           </View>

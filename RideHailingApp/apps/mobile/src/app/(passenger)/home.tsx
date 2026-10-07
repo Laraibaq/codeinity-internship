@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   ScrollView,
   StyleSheet,
   StatusBar,
+  Modal,
 } from "react-native";
 import Animated, {
   useSharedValue,
@@ -47,6 +48,8 @@ import {
   reverseGeocodeLocation,
 } from "@/lib/location/location-service";
 import { usePassengerRideStore } from "@/store/passenger/passenger-ride-store";
+import { nearbyDriversApi, type NearbyDriver } from "@/lib/api/passenger/nearby-drivers";
+import { NearbyDriverMarkers } from "@/components/passenger/nearby-driver-markers";
 import {
   PassengerMap,
   type PassengerMapRef,
@@ -60,6 +63,33 @@ export default function PassengerHomeScreen() {
   const pickup = usePassengerRideStore((s) => s.pickup);
   const setCurrentLocation = usePassengerRideStore((s) => s.setCurrentLocation);
   const setPickup = usePassengerRideStore((s) => s.setPickup);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+
+  // Real available drivers around the passenger (coarse positions from GET /drivers/nearby). Drives
+  // both the map markers and the "N drivers nearby" pill; nothing is shown until the data arrives.
+  const [nearbyDrivers, setNearbyDrivers] = useState<NearbyDriver[]>([]);
+  const nearbyCenter = pickup ?? currentLocation;
+  useEffect(() => {
+    if (!nearbyCenter) return;
+    let isMounted = true;
+    const load = async () => {
+      try {
+        const res = await nearbyDriversApi.getNearby({
+          lat: nearbyCenter.latitude,
+          lng: nearbyCenter.longitude,
+        });
+        if (isMounted) setNearbyDrivers(res.drivers);
+      } catch {
+        if (isMounted) setNearbyDrivers([]);
+      }
+    };
+    load();
+    const t = setInterval(load, 15000);
+    return () => {
+      isMounted = false;
+      clearInterval(t);
+    };
+  }, [nearbyCenter?.latitude, nearbyCenter?.longitude]);
 
   // Check location permission on mount and acquire real GPS fix
   const hasInitialized = React.useRef(false);
@@ -165,7 +195,9 @@ export default function PassengerHomeScreen() {
               }
             : undefined
         }
-      />
+      >
+        <NearbyDriverMarkers drivers={nearbyDrivers} />
+      </PassengerMap>
 
       {/* Top Header (absolute) */}
       <View style={styles.header}>
@@ -196,15 +228,16 @@ export default function PassengerHomeScreen() {
         </View>
       </Pressable>
 
-      {/* Nearby Vehicle Chip */}
-      <View style={styles.nearbyVehicle}>
-        <View style={styles.etaChip}>
-          <Text style={styles.etaText}>3 min</Text>
+      {/* Nearby drivers pill: real count from /drivers/nearby; hidden when none/unknown. */}
+      {nearbyDrivers.length > 0 ? (
+        <View style={styles.nearbyVehicle} pointerEvents="none">
+          <View style={styles.etaChip}>
+            <Text style={styles.etaText}>
+              {nearbyDrivers.length} {nearbyDrivers.length === 1 ? "driver" : "drivers"} nearby
+            </Text>
+          </View>
         </View>
-        <View style={styles.carIconCircle}>
-          <MaterialIcons name="directions-car" size={20} color={themeColors.primary} />
-        </View>
-      </View>
+      ) : null}
 
       {/* My Location FAB */}
       <Pressable
@@ -284,7 +317,13 @@ export default function PassengerHomeScreen() {
                 isActive && styles.navItemActive,
                 pressed && styles.navItemPressed,
               ]}
-              onPress={() => router.push(item.route as any)}
+              onPress={() => {
+                if (item.key === "payments") {
+                  setShowPaymentModal(true);
+                } else {
+                  router.push(item.route as any);
+                }
+              }}
               accessibilityLabel={item.label}
             >
               <MaterialIcons
@@ -299,6 +338,39 @@ export default function PassengerHomeScreen() {
           );
         })}
       </View>
+
+      {/* Payment Information Modal (MVP1 Policy: Cash-Only PKR) */}
+      <Modal
+        visible={showPaymentModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowPaymentModal(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalIconBox}>
+              <MaterialIcons name="payments" size={32} color={themeColors.primary} />
+            </View>
+            <Text style={styles.modalTitle}>Payment Method</Text>
+            <View style={styles.cashBadge}>
+              <MaterialIcons name="check-circle" size={16} color="#059669" />
+              <Text style={styles.cashBadgeText}>Cash Only (PKR)</Text>
+            </View>
+            <Text style={styles.modalBody}>
+              Indigo currently operates exclusively with direct cash settlements. All fares are paid in Pakistani Rupees (PKR) directly to the driver at the end of each trip.
+            </Text>
+            <Text style={styles.modalSub}>
+              Digital wallets and card payments will be enabled in upcoming releases.
+            </Text>
+            <Pressable
+              style={({ pressed }) => [styles.modalBtn, pressed && { opacity: 0.85 }]}
+              onPress={() => setShowPaymentModal(false)}
+            >
+              <Text style={styles.modalBtnText}>Understood</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -310,7 +382,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   mapBg: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   // ── Header ──
   header: {
@@ -442,8 +514,9 @@ const styles = StyleSheet.create({
   // ── Nearby Vehicle ──
   nearbyVehicle: {
     position: "absolute",
-    top: "38%",
-    left: "62%",
+    top: "30%",
+    left: 0,
+    right: 0,
     zIndex: 10,
     alignItems: "center",
     gap: 4,
@@ -666,5 +739,82 @@ const styles = StyleSheet.create({
   },
   navLabelActive: {
     color: themeColors.primary,
+  },
+  // ── Payment Modal ──
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.55)",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 24,
+  },
+  modalCard: {
+    width: "100%",
+    maxWidth: 360,
+    backgroundColor: themeColors.surface,
+    borderRadius: 24,
+    padding: 24,
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.25,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  modalIconBox: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: themeColors.surfaceContainerHigh,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 16,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: themeColors.onSurface,
+    marginBottom: 10,
+  },
+  cashBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#ecfdf5",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    marginBottom: 16,
+  },
+  cashBadgeText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#059669",
+  },
+  modalBody: {
+    fontSize: 14,
+    color: themeColors.onSurfaceVariant,
+    textAlign: "center",
+    lineHeight: 20,
+    marginBottom: 10,
+  },
+  modalSub: {
+    fontSize: 12,
+    color: themeColors.outline,
+    textAlign: "center",
+    lineHeight: 18,
+    marginBottom: 20,
+  },
+  modalBtn: {
+    width: "100%",
+    backgroundColor: themeColors.primary,
+    paddingVertical: 14,
+    borderRadius: 14,
+    alignItems: "center",
+  },
+  modalBtnText: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: themeColors.onPrimary,
   },
 });

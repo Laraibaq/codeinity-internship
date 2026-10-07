@@ -7,8 +7,15 @@ import { formatCurrency } from "@/utils/currency";
 export type RideRequest = {
   id: string;
   name: string;
-  rating: number;
+  rating: number | null;
   offer: number;
+  negotiation?: {
+    negotiationId: string;
+    status: string;
+    currentAmount: number;
+    yourTurn: boolean;
+    pendingOfferId?: string;
+  };
   pickupLabel: string;
   pickupMeta: string;
   dropoffLabel: string;
@@ -45,6 +52,13 @@ export function RideRequestCard({
   onCounter: () => void;
   onReject: () => void;
 }) {
+  const negotiation = request.negotiation;
+  const waitingForPassenger = !!negotiation && !negotiation.yourTurn;
+  const passengerCountered = !!negotiation && negotiation.yourTurn;
+  // Accept is only meaningful when there is no negotiation (original ask) or the passenger's
+  // counter is pending for this driver.
+  const acceptDisabled = waitingForPassenger;
+
   return (
     <View className="w-full gap-3 rounded-2xl border border-outline-variant bg-surface p-4 shadow-sm">
       <View className="flex-row items-start justify-between gap-2">
@@ -52,16 +66,25 @@ export function RideRequestCard({
           <Text className="font-body-md text-body-md font-semibold text-on-surface">
             {request.name}
           </Text>
-          <View className="flex-row items-center gap-1 rounded-full bg-surface-container-low px-2 py-0.5">
-            <MaterialIcons name="star" size={12} color={themeColors.primary} />
-            <Text className="font-label-sm text-label-sm text-on-surface-variant">
-              {request.rating.toFixed(1)}
-            </Text>
-          </View>
+          {request.rating != null ? (
+            <View className="flex-row items-center gap-1 rounded-full bg-surface-container-low px-2 py-0.5">
+              <MaterialIcons name="star" size={12} color={themeColors.primary} />
+              <Text className="font-label-sm text-label-sm text-on-surface-variant">
+                {request.rating.toFixed(1)}
+              </Text>
+            </View>
+          ) : null}
         </View>
-        <Text className="font-fare-display text-fare-display text-primary">
-          {formatCurrency(request.offer)}
-        </Text>
+        <View className="items-end">
+          {passengerCountered ? (
+            <Text className="font-label-sm text-label-sm text-on-surface-variant">
+              Passenger countered
+            </Text>
+          ) : null}
+          <Text className="font-fare-display text-fare-display text-primary">
+            {formatCurrency(request.offer)}
+          </Text>
+        </View>
       </View>
 
       <View className="ml-2 mt-1 border-l-2 border-outline-variant/30 pb-2 pl-6">
@@ -104,10 +127,17 @@ export function RideRequestCard({
 
       <Pressable
         onPress={onAccept}
+        disabled={acceptDisabled}
         className="h-14 w-full flex-row items-center justify-center gap-2 rounded-xl bg-primary shadow-sm active:scale-[0.98]"
+        style={acceptDisabled ? { opacity: 0.5 } : undefined}
       >
         <Text className="font-label-sm text-label-sm text-on-primary">ACCEPT</Text>
       </Pressable>
+      {waitingForPassenger && negotiation ? (
+        <Text className="text-center font-label-sm text-label-sm text-on-surface-variant">
+          Waiting for the passenger to respond to your {formatCurrency(negotiation.currentAmount)} offer
+        </Text>
+      ) : null}
       <View className="flex-row gap-3">
         <Pressable
           onPress={onCounter}

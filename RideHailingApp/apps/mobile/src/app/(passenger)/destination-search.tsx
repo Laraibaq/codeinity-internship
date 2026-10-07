@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   View,
   Text,
@@ -11,6 +11,8 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { useRouter } from "expo-router";
+import { isAxiosError } from "axios";
+import { passengerLocationsApi, type SavedPlace } from "@/lib/api/passenger/locations";
 import { MaterialIcons } from "@expo/vector-icons";
 import { themeColors } from "@/constants/theme-colors";
 import {
@@ -22,13 +24,31 @@ import { usePassengerRideStore } from "@/store/passenger/passenger-ride-store";
 const MAP_URI =
   "https://lh3.googleusercontent.com/aida-public/AB6AXuAQ-jCefL67HW4mlBdPwpp1TwSoR8F2ZzgKb05KvTDnKqXTgYtQ-OTp8TeOMQ5nhURI63YmJiOyDgPmqqYEdlmuorzAhwqS2Sa4vnHsV7ynG4pQruML-I8UbmRaDcSMXWmzz_cAjYgcGabm0v3Y4h0FBFVdYwbOhPkZGCLeWdLpjB4d9FK-_vz9DxLvRz23WtfOCh9tVT0JuhXyXY9xBpxCAncRHk52otKlwp0E-wUnYBsUu9R9KlV-";
 
-const SAVED_PLACES = [
-  { key: "home", label: "Home", icon: "home" as const, address: "123 Main St", query: "123 Main St" },
-  { key: "work", label: "Work", icon: "work" as const, address: "Tech Hub, Downtown", query: "Downtown" },
-];
+type SavedLoadState = "loading" | "ready" | "unavailable" | "error";
+
+const savedIconForType = (type: SavedPlace["type"]) =>
+  type === "home" ? ("home" as const) : type === "work" ? ("work" as const) : ("favorite" as const);
 
 export default function PassengerDestinationSearchScreen() {
   const router = useRouter();
+  const [savedPlaces, setSavedPlaces] = useState<SavedPlace[]>([]);
+  const [savedState, setSavedState] = useState<SavedLoadState>("loading");
+
+  const loadSavedPlaces = useCallback(async () => {
+    setSavedState("loading");
+    try {
+      setSavedPlaces(await passengerLocationsApi.getSavedPlaces());
+      setSavedState("ready");
+    } catch (err) {
+      // A 404 means the backend endpoint isn't built yet, not that something broke.
+      setSavedState(isAxiosError(err) && err.response?.status === 404 ? "unavailable" : "error");
+    }
+  }, []);
+
+  useEffect(() => {
+    loadSavedPlaces();
+  }, [loadSavedPlaces]);
+
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<GeocodedPlace[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -212,23 +232,61 @@ export default function PassengerDestinationSearchScreen() {
               {/* Saved Places */}
               <View style={styles.section}>
                 <Text style={styles.sectionLabel}>Saved Places</Text>
-                <View style={styles.savedGrid}>
-                  {SAVED_PLACES.map((place) => (
+                {savedState === "loading" ? (
+                  <View style={styles.emptyBox}>
+                    <ActivityIndicator color={themeColors.primary} />
+                  </View>
+                ) : savedState === "unavailable" ? (
+                  <View style={styles.emptyBox}>
+                    <MaterialIcons name="hourglass-empty" size={32} color={themeColors.outline} />
+                    <Text style={styles.emptyText}>Not available yet</Text>
+                    <Text style={styles.emptySub}>
+                      Saved places aren't available yet. Check back in a future update.
+                    </Text>
+                  </View>
+                ) : savedState === "error" ? (
+                  <View style={styles.emptyBox}>
+                    <MaterialIcons name="error-outline" size={32} color={themeColors.outline} />
+                    <Text style={styles.emptyText}>Couldn't load saved places</Text>
+                    <Text style={styles.emptySub}>Check your connection and try again.</Text>
                     <Pressable
-                      key={place.key}
-                      style={({ pressed }) => [styles.savedCard, pressed && styles.savedCardPressed]}
-                      onPress={() => setQuery(place.query)}
+                      onPress={loadSavedPlaces}
+                      style={({ pressed }) => [styles.retryBtn, pressed && styles.pressed]}
                     >
-                      <View style={styles.savedIconBox}>
-                        <MaterialIcons name={place.icon} size={22} color={themeColors.primary} />
-                      </View>
-                      <Text style={styles.savedLabel}>{place.label}</Text>
-                      <Text style={styles.savedAddress} numberOfLines={1}>
-                        {place.address}
-                      </Text>
+                      <Text style={styles.retryText}>Retry</Text>
                     </Pressable>
-                  ))}
-                </View>
+                  </View>
+                ) : savedPlaces.length === 0 ? (
+                  <View style={styles.emptyBox}>
+                    <MaterialIcons name="favorite-border" size={32} color={themeColors.outline} />
+                    <Text style={styles.emptyText}>No saved places yet</Text>
+                    <Text style={styles.emptySub}>Places you save will show up here.</Text>
+                  </View>
+                ) : (
+                  <View style={styles.savedGrid}>
+                    {savedPlaces.map((place) => (
+                      <Pressable
+                        key={place.id}
+                        style={({ pressed }) => [styles.savedCard, pressed && styles.savedCardPressed]}
+                        onPress={() => handleSelectPlace(place)}
+                      >
+                        <View style={styles.savedIconBox}>
+                          <MaterialIcons
+                            name={savedIconForType(place.type)}
+                            size={22}
+                            color={themeColors.primary}
+                          />
+                        </View>
+                        <Text style={styles.savedLabel} numberOfLines={1}>
+                          {place.name}
+                        </Text>
+                        <Text style={styles.savedAddress} numberOfLines={1}>
+                          {place.address}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                )}
               </View>
             </>
           )}
@@ -258,11 +316,11 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   mapBg: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     opacity: 0.4,
   },
   glassOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: "rgba(249,249,255,0.12)",
   },
   panel: {
@@ -365,7 +423,20 @@ const styles = StyleSheet.create({
   // ── Saved Places ──
   savedGrid: {
     flexDirection: "row",
+    flexWrap: "wrap",
     gap: 12,
+  },
+  retryBtn: {
+    marginTop: 16,
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    borderRadius: 12,
+    backgroundColor: "rgba(53,37,205,0.1)",
+  },
+  retryText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: themeColors.primary,
   },
   savedCard: {
     flex: 1,

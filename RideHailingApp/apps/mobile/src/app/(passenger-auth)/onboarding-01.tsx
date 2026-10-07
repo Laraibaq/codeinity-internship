@@ -8,6 +8,7 @@ import {
   StatusBar,
 } from "react-native";
 import { useRouter } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialIcons } from "@expo/vector-icons";
 import { themeColors } from "@/constants/theme-colors";
 
@@ -16,16 +17,23 @@ const ILLUSTRATION_URI =
 
 export default function PassengerOnboarding01Screen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
   return (
     <View style={styles.root}>
       <StatusBar barStyle="dark-content" backgroundColor="#f9f9ff" />
 
       {/* Top Bar - Skip */}
-      <View style={styles.topBar}>
-        <Text style={styles.skip} onPress={() => router.push("/(passenger-auth)/login")}>
-          Skip
-        </Text>
+      <View style={[styles.topBar, { paddingTop: Math.max(insets.top + 8, 20) }]}>
+        <Pressable
+          onPress={() => router.push("/(passenger-auth)/login")}
+          hitSlop={{ top: 12, bottom: 12, left: 16, right: 16 }}
+          style={({ pressed }) => pressed && styles.pressed}
+          accessibilityRole="button"
+          accessibilityLabel="Skip"
+        >
+          <Text style={styles.skip}>Skip</Text>
+        </Pressable>
       </View>
 
       {/* Main Content */}
@@ -71,7 +79,7 @@ export default function PassengerOnboarding01Screen() {
       </View>
 
       {/* Footer */}
-      <View style={styles.footer}>
+      <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom + 16, 32) }]}>
         {/* Progress Dots */}
         <View style={styles.dotsRow}>
           <View style={[styles.dot, styles.dotActive]} />
@@ -83,6 +91,9 @@ export default function PassengerOnboarding01Screen() {
         <Pressable
           onPress={() => router.push("/(passenger-auth)/onboarding-02" as any)}
           style={({ pressed }) => [styles.btnNext, pressed && styles.pressed]}
+          accessibilityRole="button"
+          accessibilityLabel="Next"
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         >
           <Text style={styles.btnNextText}>Next</Text>
         </Pressable>
@@ -96,30 +107,30 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#f9f9ff",
     justifyContent: "space-between",
-    overflow: "hidden",
   },
   topBar: {
-    height: 48,
-    paddingTop: 16,
     paddingHorizontal: 20,
     alignItems: "flex-end",
+    zIndex: 10,
   },
   skip: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "600",
     letterSpacing: 0.6,
     color: themeColors.onSurfaceVariant,
+    paddingVertical: 8,
   },
   main: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 20,
-    paddingVertical: 24,
+    paddingVertical: 16,
   },
   illustrationBox: {
     width: "100%",
-    aspectRatio: 1,
+    maxWidth: 340,
+    aspectRatio: 1.1,
     borderRadius: 16,
     overflow: "hidden",
     backgroundColor: themeColors.surfaceContainerLow,
@@ -133,13 +144,24 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.08,
     shadowRadius: 12,
     elevation: 4,
+    position: "relative",
   },
   radialOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     backgroundColor: "rgba(53,37,205,0.04)",
   },
   bgImage: {
-    ...StyleSheet.absoluteFillObject,
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    width: "100%",
+    height: "100%",
     opacity: 0.2,
   },
   fareContainer: {

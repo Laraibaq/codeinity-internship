@@ -12,6 +12,7 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { useRouter } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialIcons } from "@expo/vector-icons";
 import { themeColors } from "@/constants/theme-colors";
 import { normalizePhone } from "@/utils/phone";
@@ -46,6 +47,7 @@ const FIELDS: Field[] = [
 
 export default function PassengerRegisterScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [values, setValues] = useState(initialValues);
   const [focused, setFocused] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
@@ -137,13 +139,29 @@ export default function PassengerRegisterScreen() {
       <View style={styles.blobBR} />
 
       <ScrollView
-        contentContainerStyle={styles.scroll}
+        contentContainerStyle={[
+          styles.scroll,
+          {
+            paddingTop: Math.max(insets.top + 8, 20),
+            paddingBottom: Math.max(insets.bottom + 20, 32),
+          },
+        ]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        {/* Brand */}
+        {/* Brand & Back Row */}
         <View style={styles.brandRow}>
+          <Pressable
+            onPress={() => router.back()}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            style={styles.backBtn}
+            accessibilityRole="button"
+            accessibilityLabel="Back"
+          >
+            <MaterialIcons name="arrow-back" size={24} color={themeColors.onSurfaceVariant} />
+          </Pressable>
           <Text style={styles.brand}>Ryde</Text>
+          <View style={styles.spacer} />
         </View>
 
         {/* Card */}
@@ -279,7 +297,22 @@ const styles = StyleSheet.create({
     paddingVertical: 40,
   },
   brandRow: {
-    marginBottom: 32,
+    width: "100%",
+    maxWidth: 448,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 24,
+  },
+  backBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  spacer: {
+    width: 40,
   },
   brand: {
     fontSize: 28,

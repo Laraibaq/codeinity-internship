@@ -17,6 +17,7 @@ import Animated, {
   FadeInUp,
 } from "react-native-reanimated";
 import { useRouter } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialIcons } from "@expo/vector-icons";
 import { themeColors } from "@/constants/theme-colors";
 
@@ -33,6 +34,7 @@ const MAP_IMAGE_URI =
 
 export default function PassengerLocationPermissionScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [isRequesting, setIsRequesting] = React.useState(false);
   const setCurrentLocation = usePassengerRideStore((s) => s.setCurrentLocation);
   const setPickup = usePassengerRideStore((s) => s.setPickup);
@@ -112,7 +114,13 @@ export default function PassengerLocationPermissionScreen() {
       </View>
 
       {/* Bottom Sheet Card */}
-      <Animated.View entering={FadeInUp.duration(500)} style={styles.sheet}>
+      <Animated.View
+        entering={FadeInUp.duration(500)}
+        style={[
+          styles.sheet,
+          { paddingBottom: Math.max(insets.bottom + 16, 32) },
+        ]}
+      >
         {/* Drag handle */}
         <View style={styles.dragHandle} />
 
@@ -131,6 +139,9 @@ export default function PassengerLocationPermissionScreen() {
           <Pressable
             onPress={handleAllow}
             style={({ pressed }) => [styles.btnAllow, pressed && styles.pressed]}
+            accessibilityRole="button"
+            accessibilityLabel="Allow Access"
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
             <Text style={styles.btnAllowText}>Allow Access</Text>
           </Pressable>
@@ -138,6 +149,9 @@ export default function PassengerLocationPermissionScreen() {
           <Pressable
             onPress={handleNotNow}
             style={({ pressed }) => [styles.btnNotNow, pressed && styles.pressed]}
+            accessibilityRole="button"
+            accessibilityLabel="Not Now"
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
             <Text style={styles.btnNotNowText}>Not Now</Text>
           </Pressable>
@@ -151,14 +165,21 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: "#f9f9ff",
-    overflow: "hidden",
   },
   mapBg: {
-    ...StyleSheet.absoluteFillObject,
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     opacity: 0.4,
   },
   mapOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     backgroundColor: "rgba(249,249,255,0.15)",
   },
   pinContainer: {

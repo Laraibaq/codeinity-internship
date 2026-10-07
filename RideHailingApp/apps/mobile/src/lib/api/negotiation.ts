@@ -28,9 +28,18 @@ export interface NegotiationSession {
     id: string;
     name: string;
     phone: string;
-    rating?: number;
-    vehicle?: any;
+    rating?: number | null;
+    vehicle?: {
+      type?: string | null;
+      make?: string | null;
+      model?: string | null;
+      color?: string | null;
+      registrationNumber?: string | null;
+    } | null;
   };
+  // Passenger view only: estimated from the driver's last position; null when unknown.
+  driverDistanceKm?: number | null;
+  etaMinutes?: number | null;
   offers: NegotiationOfferItem[];
 }
 

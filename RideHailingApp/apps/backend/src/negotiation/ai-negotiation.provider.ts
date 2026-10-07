@@ -1,5 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { AiFareSuggestionResponse } from './dto/fare-suggestion.dto';
+import {
+  FARE_RATES_BY_RIDE_TYPE_REQUIRES_BUSINESS_SIGNOFF,
+  PLACEHOLDER_MIN_FARE_FLOOR_REQUIRES_BUSINESS_SIGNOFF,
+  PLACEHOLDER_MIN_FARE_MULTIPLIER_REQUIRES_BUSINESS_SIGNOFF,
+  PLACEHOLDER_MAX_FARE_MULTIPLIER_REQUIRES_BUSINESS_SIGNOFF,
+} from './fare-config';
 
 export interface NegotiationContext {
   rideId: string;
@@ -28,15 +34,23 @@ export class AiNegotiationProvider {
    */
   calculateFareBounds(distanceKm: number, rideType = 'standard'): { minBound: number; maxBound: number; baselineFare: number } {
     const dist = Math.max(0.5, distanceKm || 1);
-    let baseRate = 100 + dist * 45;
-
-    if (rideType === 'bike') baseRate = 60 + dist * 25;
-    else if (rideType === 'premium') baseRate = 160 + dist * 70;
-    else if (rideType === 'xl') baseRate = 200 + dist * 80;
+    const rates =
+      FARE_RATES_BY_RIDE_TYPE_REQUIRES_BUSINESS_SIGNOFF[rideType] ??
+      FARE_RATES_BY_RIDE_TYPE_REQUIRES_BUSINESS_SIGNOFF.standard;
+    const baseRate =
+      rates.PLACEHOLDER_BASE_FARE_REQUIRES_BUSINESS_SIGNOFF +
+      dist * rates.PLACEHOLDER_PER_KM_RATE_REQUIRES_BUSINESS_SIGNOFF;
 
     const baselineFare = Number(baseRate.toFixed(2));
-    const minBound = Number(Math.max(50, baselineFare * 0.7).toFixed(2));
-    const maxBound = Number((baselineFare * 2.2).toFixed(2));
+    const minBound = Number(
+      Math.max(
+        PLACEHOLDER_MIN_FARE_FLOOR_REQUIRES_BUSINESS_SIGNOFF,
+        baselineFare * PLACEHOLDER_MIN_FARE_MULTIPLIER_REQUIRES_BUSINESS_SIGNOFF,
+      ).toFixed(2),
+    );
+    const maxBound = Number(
+      (baselineFare * PLACEHOLDER_MAX_FARE_MULTIPLIER_REQUIRES_BUSINESS_SIGNOFF).toFixed(2),
+    );
 
     return { minBound, maxBound, baselineFare };
   }

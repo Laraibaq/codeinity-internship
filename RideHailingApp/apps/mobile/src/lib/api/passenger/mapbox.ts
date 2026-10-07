@@ -104,11 +104,22 @@ export async function searchPlacesMapbox(
   const trimmed = query.trim();
   if (!trimmed) return [];
 
+  // Check if proximity is in Pakistan (lat 23.5-37.5, lon 60.5-78.0)
+  const isPkProximity =
+    proximity &&
+    proximity.latitude >= 23.5 &&
+    proximity.latitude <= 37.5 &&
+    proximity.longitude >= 60.5 &&
+    proximity.longitude <= 78.0;
+
   let url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(
     trimmed,
   )}.json?access_token=${MAPBOX_ACCESS_TOKEN}&autocomplete=true&types=address,poi,neighborhood,place,locality`;
 
-  if (proximity) {
+  // Always bias to Pakistan for ride hailing app unless specific foreign query
+  url += `&country=pk`;
+
+  if (isPkProximity) {
     url += `&proximity=${proximity.longitude},${proximity.latitude}`;
   }
 
@@ -117,7 +128,7 @@ export async function searchPlacesMapbox(
 
   return features.map((f: any) => {
     const [lon, lat] = f.center || [0, 0];
-    const dist = proximity
+    const dist = isPkProximity
       ? calculateHaversineDistanceKm(proximity.latitude, proximity.longitude, lat, lon)
       : undefined;
 

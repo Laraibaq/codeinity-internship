@@ -62,7 +62,13 @@ export default function PassengerAccountCreatedScreen() {
       });
       passengerRegistrationDraft.pendingTokens = null;
     }
-    router.replace("/(passenger)/home");
+    // Go to the location-permission prompt next, not straight to home -- it lives in the
+    // (passenger-auth) route group but was previously only ever reachable post-login, from a
+    // button tap inside home.tsx/pickup-select.tsx. This is the actual end of onboarding
+    // (register -> otp-verify -> account-created), so it's the right place to ask once, up front,
+    // rather than waiting for the user to first hit a screen that needs it. It already routes to
+    // /(passenger)/home itself once the user allows or dismisses it.
+    router.replace("/(passenger-auth)/location-permission" as any);
   };
 
   return (

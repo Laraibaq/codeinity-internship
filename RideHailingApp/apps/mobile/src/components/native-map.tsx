@@ -2,6 +2,7 @@ import React, { useMemo } from "react";
 import { StyleSheet, View, type StyleProp, type ViewStyle } from "react-native";
 import MapView, { Marker, Polyline, type Region } from "react-native-maps";
 import { themeColors } from "@/constants/theme-colors";
+import { PAKISTAN_DEFAULT_REGION } from "@/constants/default-region";
 
 export interface MapPoint {
   latitude: number;
@@ -21,12 +22,7 @@ export interface NativeMapProps {
   children?: React.ReactNode;
 }
 
-const DEFAULT_REGION: Region = {
-  latitude: 37.7749,
-  longitude: -122.4194,
-  latitudeDelta: 0.05,
-  longitudeDelta: 0.05,
-};
+const DEFAULT_REGION: Region = PAKISTAN_DEFAULT_REGION;
 
 export function isValidCoord(p?: MapPoint | null): p is MapPoint {
   return (
@@ -118,7 +114,7 @@ export function NativeMap({
   return (
     <View style={[styles.container, style]}>
       <MapView
-        style={StyleSheet.absoluteFillObject}
+        style={StyleSheet.absoluteFill}
         initialRegion={calculatedRegion}
         showsUserLocation={showUserLocation}
         showsCompass={false}
@@ -169,7 +165,7 @@ export function NativeMap({
 
 const styles = StyleSheet.create({
   container: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     overflow: "hidden",
   },
 });
